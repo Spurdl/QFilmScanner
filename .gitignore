@@ -39,3 +39,18 @@
 
 # debug information files
 *.dwo
+
+# Removed builds
+build/
+Build/
+debub/
+Debug/
+release/
+Release/
+
+# remove test folders
+*.tiff
+*.tif
+testimages/
+test/
+tests
