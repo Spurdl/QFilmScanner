@@ -9,8 +9,12 @@
 #include <QProgressBar>
 #include <QShortcut>
 #include <QTimer>
+#include <QComboBox>
+
 #include "AspectRatioLabel.h"
-#include "ScanWorker.h"
+
+#include "workers/ScanWorker.h"
+#include "workers/ImageWorker.h"
 
 class MainWindow : public QMainWindow
 {
@@ -21,6 +25,7 @@ public:
     ~MainWindow();
 
 private:
+// UI
     AspectRatioLabel *imageLabel;
 
     QProgressBar *progressBar;
@@ -32,41 +37,68 @@ private:
     QPushButton *prevBtn;
     QPushButton *folderBtn;
     QPushButton *deviceBtn;
+
     QCheckBox *colorswitch;
     QCheckBox *bitswitch;
     QLabel *frameLabel;
     QLineEdit *deviceEdit;
     QLineEdit *folderEdit;
 
-    int frameIndex = 0;
+    QComboBox *previewDpiBox;
+    QComboBox *scanDpiBox;
 
-    QTimer *timer;
-    float progressValue;
-    int maxTime;
-    int estimatedSeconds;
+    QCheckBox *slideSwitch;
+    QCheckBox *flipSwitch;
+    QCheckBox *upsideSwitch;
+    QCheckBox *rawSwitch;
 
-    bool colorMode = true;
-    QString outputFolder;
-
-    QThread workerThread;
-    ScanWorker *worker;
+    QList<QShortcut*> shortcuts;
+// Internal state
+    ScanParameters currentParams;
+    ScannerCapabilities currentCaps;
 
     bool isBusy = false;
-    QList<QShortcut*> shortcuts;
+    bool deviceReady = false;
+    int maxTime;
+    int estimatedSeconds;
+    int frameIndex = 0;
+    float progressValue;
+    
+    int previewDpi = 0;
+    int scanDpi = 0;
+
+    QString outputFolder;
+
+// Image itself
+    QImage rawImage;
+
+    QTimer *timer;
+
+    QThread workerThread[2];
+    ScanWorker *scanWorker;
+    ImageWorker *editWorker;
 
 private slots:
-    void updateFrameLabel();
-    void updateTimeLabel();
-    void setBusy(bool busy);
+// buttons
     void onPreview();
     void onScan();
     void onNext();
     void onPrev();
     void onChooseFolder();
-    void onImageReady(const QImage &img);
     void onChooseDevice();
+
+// helpers
+    void updateFrameLabel();
+    void updateTimeLabel();
+    void setProgressReadyStyle();
+    void setProgressScanningStyle();
+    void callPreviewUpdater();
+    void setBusy(bool busy);
+
+//signal handlers
     void onDeviceListFound(QStringList devices);
+    void onCapabilitiesReady(const ScannerCapabilities &caps);
     void onScanStarted(int estimatedSeconds);
-    void onProgress(int percent);
-    void onScanFinished();
+    void onScanFinished(const QImage &img);
+    void onImageReady(const QImage &img);
 };

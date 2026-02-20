@@ -1,5 +1,7 @@
-#include "MainWindow.h"
-#include "ScanWorker.h"
+#include <algorithm>
+#include <fstream>
+#include <cmath>
+
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QFileDialog>
@@ -10,9 +12,12 @@
 #include <QMessageBox>
 #include <QStatusBar>
 #include <QKeySequence>
-#include <algorithm>
-#include <fstream>
-#include <cmath>
+#include <QGuiApplication>
+#include <QStyleHints>
+
+#include "MainWindow.h"
+#include "workers/ScanWorker.h"
+#include "workers/ImageWorker.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -21,11 +26,15 @@ MainWindow::MainWindow(QWidget *parent)
     auto *central = new QWidget;
     setCentralWidget(central);
 
+    bool dark = QGuiApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark;
+
+    qRegisterMetaType<ScanParameters>("ScanParameters");
+    qRegisterMetaType<ScannerCapabilities>("ScannerCapabilities");
+
     statusBar()->showMessage("Ready");
 
     imageLabel = new AspectRatioLabel();
     imageLabel->setMinimumSize(450, 300);
-    imageLabel->setStyleSheet("background: black;");
     imageLabel->setAlignment(Qt::AlignCenter);
 
     previewBtn = new QPushButton("Preview");
@@ -36,34 +45,30 @@ MainWindow::MainWindow(QWidget *parent)
     folderBtn = new QPushButton("Choose Folder");
     colorswitch = new QCheckBox("Color");
     bitswitch = new QCheckBox("16 Bits");
+    slideSwitch = new QCheckBox("R");
+    flipSwitch = new QCheckBox("↻");
+    upsideSwitch = new QCheckBox("⭂");
+    rawSwitch = new QCheckBox("⎘");
     bitswitch->setChecked(true);
     bitswitch->setEnabled(false);
     frameLabel = new QLabel("Frame 000");
     frameLabel->setAlignment(Qt::AlignCenter);
-   /* frameLabel->setStyleSheet(
-        "color: white;"
-        "background-color: #303030;"
-        "font-weight: bold;"
-        "font-size: 16px;"
-        "padding: 6px;"
-        "border-radius: 4px;"
-    );*/
 
     QFrame *line = new QFrame;
     line->setFrameShape(QFrame::HLine);  
-    line->setFrameShadow(QFrame::Raised); // Sunken / Raised / Plain
+    line->setFrameShadow(QFrame::Raised);
     line->setLineWidth(4);
     line->setFixedHeight(4); 
 
     QFrame *line1 = new QFrame;
     line1->setFrameShape(QFrame::HLine);  
-    line1->setFrameShadow(QFrame::Raised); // Sunken / Raised / Plain
+    line1->setFrameShadow(QFrame::Raised);
     line1->setLineWidth(4);
     line1->setFixedHeight(4); 
     
     QFrame *line2 = new QFrame;
     line2->setFrameShape(QFrame::HLine);  
-    line2->setFrameShadow(QFrame::Raised); // Sunken / Raised / Plain
+    line2->setFrameShadow(QFrame::Raised);
     line2->setLineWidth(4);
     line2->setFixedHeight(4); 
 
@@ -80,17 +85,23 @@ MainWindow::MainWindow(QWidget *parent)
     deviceEdit = new QLineEdit;
     deviceEdit->setReadOnly(true);
 
+    previewDpiBox = new QComboBox;
+    scanDpiBox = new QComboBox;
+
+    previewDpiBox->setEnabled(false);
+    scanDpiBox->setEnabled(false);
+
     timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, &MainWindow::updateTimeLabel);
 
     // TOP PANEL
     auto *topLayout = new QHBoxLayout;
     topLayout->setDirection(QBoxLayout::Direction::RightToLeft);
-    topLayout->addWidget(frameLabel);
-    topLayout->addWidget(nextBtn);
-    topLayout->addWidget(prevBtn);
-    topLayout->addWidget(timeLabel, 12);
-    topLayout->addWidget(progressBar, 28);
+    topLayout->addWidget(frameLabel, 12);
+    topLayout->addWidget(nextBtn, 4);
+    topLayout->addWidget(prevBtn, 4);
+    topLayout->addWidget(timeLabel, 30);
+    topLayout->addWidget(progressBar, 50);
     //topLayout->addWidget();
 
     // LEFT PANEL
@@ -110,17 +121,45 @@ MainWindow::MainWindow(QWidget *parent)
     together->addWidget(colorswitch);
     together->addWidget(bitswitch);
 
+    // DPI SELECTION
+    auto *togetherToo = new QHBoxLayout;
+    auto *UpDown = new QVBoxLayout;
+    auto *UpDownToo = new QVBoxLayout;
+    UpDown->addWidget(new QLabel("Preview DPI"));
+    UpDown->addWidget(previewDpiBox);
+    UpDownToo->addWidget(new QLabel("Scan DPI"));
+    UpDownToo->addWidget(scanDpiBox);
+    
+    togetherToo->addLayout(UpDown);
+    togetherToo->addLayout(UpDownToo);
+
     leftLayout->addLayout(together);
-    leftLayout->addSpacing(20);
+    leftLayout->addSpacing(10);
+    leftLayout->addLayout(togetherToo);
+    leftLayout->addStretch();
     leftLayout->addWidget(previewBtn);
     leftLayout->addWidget(scanBtn);
-    leftLayout->addStretch();
+    leftLayout->addSpacing(20);
+
+    // IMAGE EDIT LAYOUT
+    auto *imageLayout = new QHBoxLayout;
+    auto *friends = new QVBoxLayout;
+    imageLayout->addWidget(slideSwitch);
+    imageLayout->addSpacing(40);
+    imageLayout->addWidget(flipSwitch);
+    imageLayout->addSpacing(40);
+    imageLayout->addWidget(upsideSwitch);
+    imageLayout->addSpacing(40);
+    imageLayout->addWidget(rawSwitch);
+    imageLayout->setAlignment(Qt::AlignCenter);
+    friends->addWidget(imageLabel);
+    friends->addLayout(imageLayout);    
 
     // HORIZONTAL LAYOUT
     auto *horizontalLayout = new QHBoxLayout;
     horizontalLayout->setContentsMargins(0,0,0,0);
     horizontalLayout->addWidget(leftWidget);
-    horizontalLayout->addWidget(imageLabel, 1);
+    horizontalLayout->addLayout(friends, 1);
 
     // VERTICAL LAYOUT
     auto *masterLayout = new QVBoxLayout;
@@ -157,16 +196,21 @@ MainWindow::MainWindow(QWidget *parent)
     shortcuts.append(enterShortcut);
 
     // Worker thread
-    worker = new ScanWorker;
-    worker->moveToThread(&workerThread);
+    scanWorker = new ScanWorker;
+    editWorker = new ImageWorker;
+    scanWorker->moveToThread(&workerThread[0]);
+    editWorker->moveToThread(&workerThread[1]);
 
-    connect(&workerThread, &QThread::finished,
-            worker, &QObject::deleteLater);
+    connect(&workerThread[0], &QThread::finished,
+            scanWorker, &QObject::deleteLater);
 
-    connect(worker, &ScanWorker::imageReady,
-            this, &MainWindow::onImageReady);
+    connect(&workerThread[1], &QThread::finished,
+        editWorker, &QObject::deleteLater);
 
-    connect(worker, &ScanWorker::deviceListReady,
+    connect(editWorker, &ImageWorker::imageProcessed,
+        this, &MainWindow::onImageReady);
+
+    connect(scanWorker, &ScanWorker::deviceListReady,
             this, &MainWindow::onDeviceListFound);
 
     connect(previewBtn, &QPushButton::clicked,
@@ -188,19 +232,106 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(enterShortcut2, &QShortcut::activated,
             this, &MainWindow::onScan);
+
+    connect(scanWorker, &ScanWorker::capabilitiesReady,
+        this, &MainWindow::onCapabilitiesReady);
     
 
-    connect(worker, &ScanWorker::scanStarted,
+    connect(scanWorker, &ScanWorker::scanStarted,
             this, &MainWindow::onScanStarted);
 
-    connect(worker, &ScanWorker::progress,
-            this, &MainWindow::onProgress);
-
-    connect(worker, &ScanWorker::scanFinished,
+    connect(scanWorker, &ScanWorker::scanFinished,
             this, &MainWindow::onScanFinished);
 
+    connect(previewDpiBox, &QComboBox::currentIndexChanged,
+            this, [this](int index)
+    {
+        previewDpi =
+            previewDpiBox->itemData(index).toInt();
+    });
+
+    connect(scanDpiBox, &QComboBox::currentIndexChanged,
+            this, [this](int index)
+    {
+        scanDpi =
+            scanDpiBox->itemData(index).toInt();
+    });
+
+    connect(flipSwitch, &QCheckBox::checkStateChanged, 
+            this, &MainWindow::callPreviewUpdater);
+    connect(slideSwitch, &QCheckBox::checkStateChanged, 
+            this, &MainWindow::callPreviewUpdater);
+    connect(upsideSwitch, &QCheckBox::checkStateChanged, 
+            this, &MainWindow::callPreviewUpdater);
+
     updateFrameLabel();
-    workerThread.start();
+    workerThread[0].start();
+    workerThread[1].start();
+}
+
+MainWindow::~MainWindow()
+{
+    workerThread[0].quit();
+    workerThread[0].wait();
+    workerThread[1].quit();
+    workerThread[1].wait();
+}
+
+// ------ HELPERS
+
+void MainWindow::setProgressScanningStyle()
+{
+    progressBar->setStyleSheet(
+        "QProgressBar {"
+        "  border: 1px solid #444;"
+        "  border-radius: 3px;"
+        "  text-align: center;"
+        "}"
+        "QProgressBar::chunk {"
+        "  background-color: #2a82da;"   // blue
+        "}"
+    );
+}
+
+void MainWindow::setProgressReadyStyle()
+{
+    progressBar->setStyleSheet(
+        "QProgressBar {"
+        "  border: 1px solid #444;"
+        "  border-radius: 3px;"
+        "  text-align: center;"
+        "}"
+        "QProgressBar::chunk {"
+        "  background-color: #28a745;"   // green
+        "}"
+    );
+}
+
+void MainWindow::setBusy(bool busy)
+{
+    isBusy = busy;
+
+    previewBtn->setEnabled(!busy);
+    scanBtn->setEnabled(!busy);
+    nextBtn->setEnabled(!busy);
+    prevBtn->setEnabled(!busy);
+    folderBtn->setEnabled(!busy);
+    colorswitch->setEnabled(!busy);
+
+    for (auto *sc : shortcuts)
+        sc->setEnabled(!busy);
+
+    if (busy)
+        statusBar()->showMessage("Scanning...");
+    else
+        statusBar()->showMessage("Ready");
+}
+
+void MainWindow::updateFrameLabel()
+{
+    frameLabel->setText(
+        QString("Frame %1").arg(frameIndex, 3, 10, QChar('0'))
+    );
 }
 
 void MainWindow::updateTimeLabel()
@@ -230,74 +361,8 @@ void MainWindow::updateTimeLabel()
     );
 }
 
-void MainWindow::setBusy(bool busy)
-{
-    isBusy = busy;
-
-    // Disable buttons
-    previewBtn->setEnabled(!busy);
-    scanBtn->setEnabled(!busy);
-    nextBtn->setEnabled(!busy);
-    prevBtn->setEnabled(!busy);
-    folderBtn->setEnabled(!busy);
-    colorswitch->setEnabled(!busy);
-
-    // Disable shortcuts
-    for (auto *sc : shortcuts)
-        sc->setEnabled(!busy);
-
-    if (busy)
-        statusBar()->showMessage("Scanning...");
-    else
-        statusBar()->showMessage("Ready");
-}
-
-void MainWindow::onScanStarted(int estSec)
-{
-    setBusy(true);
-
-    maxTime = estSec;
-    progressBar->setValue(0);
-    //progressBar->setVisible(true);
-    //timeLabel->setVisible(true);
-
-    estimatedSeconds = estSec;
-    progressValue = 0;
-
-    timer->start(1000);
-
-    updateTimeLabel();
-}
-
-void MainWindow::onProgress(int percent)
-{
-    //progressBar->setValue(percent);
-}
-
-void MainWindow::onScanFinished()
-{
-    timer->stop();
-    progressValue=100.0;
-    estimatedSeconds=0;
-    updateTimeLabel();
-    //progressBar->setVisible(false);
-    //timeLabel->setVisible(false);
-
-    setBusy(false);
-}
-
-void MainWindow::updateFrameLabel()
-{
-    frameLabel->setText(
-        QString("Frame %1").arg(frameIndex, 3, 10, QChar('0'))
-    );
-}
-
-MainWindow::~MainWindow()
-{
-    workerThread.quit();
-    workerThread.wait();
-}
+// ----/ HELPERS
+// ---- BUTTONS
 
 void MainWindow::onChooseFolder()
 {
@@ -320,73 +385,16 @@ void MainWindow::onChooseFolder()
     }
 }
 
-void MainWindow::onPreview()
-{
-    if (worker->getDeviceName().isEmpty()){
-        deviceBtn->setStyleSheet(
-            "border: 2px solid red;"
-            "background-color: #330000;"
-            "color: white;"
-            );
-        statusBar()->showMessage("No scanner selected.", 5000);
-        return;
-    }
-    bool colorstate = colorswitch->checkState();
-    QMetaObject::invokeMethod(worker, "doPreview",
-        Q_ARG(bool, colorstate));
-    return;
-}
-
-void MainWindow::onDeviceListFound(QStringList devices){
-    deviceBtn->setEnabled(true);
-
-    if (devices.isEmpty())
-        return;
-
-    // Extract display labels only
-    QStringList displayNames;
-    for (const QString &d : devices)
-        displayNames << d.section('|',1,1);
-    bool ok;
-    QString selectedLabel = QInputDialog::getItem(
-        this,
-        "Select Scanner",
-        "Device:",
-        displayNames,
-        0,
-        false,
-        &ok);
-
-    if (ok && !selectedLabel.isEmpty())
-    {
-        int index = displayNames.indexOf(selectedLabel);
-        QString deviceId = devices[index].section('|',0,0);
-
-        worker->setDeviceName(deviceId);
-        deviceEdit->setText(selectedLabel);
-        deviceBtn->setText("Choose Device");
-        deviceBtn->setStyleSheet("");
-    }
-    else{
-        worker->setDeviceName("");
-        deviceEdit->setText("");
-        deviceBtn->setText("Choose Device");
-        deviceBtn->setStyleSheet("");
-    }
-    return;
-}
-
 void MainWindow::onScan()
 {
-    bool fail = false;
-    if (worker->getDeviceName().isEmpty()){
+    if (scanWorker->getDeviceName().isEmpty()){
         deviceBtn->setStyleSheet(
             "border: 2px solid red;"
             "background-color: #330000;"
             "color: white;"
             );
         statusBar()->showMessage("No scanner selected.", 5000);
-        fail = true;
+        return;
     }
     if (outputFolder.isEmpty()){
         folderBtn->setStyleSheet(
@@ -395,14 +403,18 @@ void MainWindow::onScan()
             "color: white;"
             );
         statusBar()->showMessage("Error: Please choose an output folder first.", 5000);
-        fail = true;
+        return;
     }
-    if(fail){return;}
-    bool colorstate = colorswitch->checkState();
-    QMetaObject::invokeMethod(worker, "doScan",
-        Q_ARG(int, frameIndex),
-        Q_ARG(bool, colorstate),
-        Q_ARG(QString, outputFolder));
+
+    currentParams.color = colorswitch->isChecked();
+    currentParams.dpi = scanDpi;
+    currentParams.outputFolder = outputFolder;
+    currentParams.frameIndex = frameIndex;
+
+    QMetaObject::invokeMethod(scanWorker,
+                              "requestScan",
+                              Q_ARG(ScanParameters,
+                                    currentParams));
 }
 
 void MainWindow::onNext()
@@ -421,17 +433,178 @@ void MainWindow::onPrev()
 void MainWindow::onChooseDevice()
 {
     deviceBtn->setEnabled(false);   // prevent double click
-    worker->setDeviceName("");
-    QMetaObject::invokeMethod(worker, "requestDeviceList");
+    scanWorker->setDeviceName("");
+    QMetaObject::invokeMethod(scanWorker, "requestDeviceList");
     deviceBtn->setText("Searching...");
     deviceEdit->setText("");
     folderBtn->setStyleSheet("");
 }
 
+void MainWindow::onPreview()
+{
+    if (scanWorker->getDeviceName().isEmpty())
+        return;
+
+    currentParams.color = colorswitch->isChecked();
+    currentParams.dpi = previewDpi;  
+
+    QMetaObject::invokeMethod(scanWorker,
+                              "requestPreview",
+                              Q_ARG(ScanParameters,
+                                    currentParams));
+}
+
+// ----/ BUTTONS
+
+// ---- SIGNALS 
+void MainWindow::onCapabilitiesReady(const ScannerCapabilities &caps)
+{
+    previewDpiBox->setPlaceholderText("");
+    scanDpiBox->setPlaceholderText("");
+
+    currentCaps = caps;
+
+    if (caps.supportedResolutions.isEmpty())
+    {
+        QMessageBox::warning(this,
+                             "Error",
+                             "Device has no usable resolution.");
+        return;
+    }
+
+
+    currentParams.dpi = caps.minDpi;
+    currentParams.bitDepth =
+        caps.supports16Bit ? 16 : 8;
+
+    currentParams.source =
+        caps.supportsTransparency ?
+        "Transparency Adapter" :
+        caps.supportedSources.value(0);
+
+    previewDpiBox->clear();
+    scanDpiBox->clear();
+
+    for (int dpi : caps.supportedResolutions)
+    {
+        previewDpiBox->addItem(QString::number(dpi), dpi);
+        scanDpiBox->addItem(QString::number(dpi), dpi);
+    }
+
+    previewDpiBox->setEnabled(true);
+    scanDpiBox->setEnabled(true);
+
+
+    int minIndex =
+        previewDpiBox->findData(caps.minDpi);
+    previewDpiBox->setCurrentIndex(minIndex);
+
+    int maxIndex =
+        scanDpiBox->findData(caps.maxDpi);
+    scanDpiBox->setCurrentIndex(maxIndex);
+
+    statusBar()->showMessage(
+        QString("Device ready. DPI range: %1 - %2")
+            .arg(caps.minDpi)
+            .arg(caps.maxDpi),
+        5000);
+}
+
 void MainWindow::onImageReady(const QImage &img)
 {
-    imageLabel->setPixmap(QPixmap::fromImage(img)
-        .scaled(imageLabel->size(),
-                Qt::KeepAspectRatio,
-                Qt::SmoothTransformation));
+    imageLabel->setPixmap(
+        QPixmap::fromImage(img)
+            .scaled(imageLabel->size(),
+                    Qt::KeepAspectRatio,
+                    Qt::SmoothTransformation));
 }
+
+void MainWindow::onScanStarted(int estSec)
+{
+    setBusy(true);
+
+    maxTime = estSec;
+    progressBar->setValue(0);
+
+    estimatedSeconds = estSec;
+    progressValue = 0;
+
+    timer->start(1000);
+
+    setProgressScanningStyle();
+    updateTimeLabel();
+}
+
+void MainWindow::callPreviewUpdater(){
+    if(rawImage.isNull()){
+        return;
+    }
+
+    ImageEditParams params;
+
+    params.turn = flipSwitch->checkState();
+    params.invert = !slideSwitch->checkState();
+    params.mirror = upsideSwitch->checkState();
+    params.autolevel = true;
+
+    QMetaObject::invokeMethod(editWorker,
+                          "processImage",
+                          Q_ARG(QImage, rawImage),
+                          Q_ARG(ImageEditParams, params));
+    return;
+}
+/*
+    QString filename =
+        QString("%1/scan_%2.png")
+            .arg(params.outputFolder)
+            .arg(params.frameIndex, 3, 10, QChar('0'));*/
+void MainWindow::onScanFinished(const QImage &img)
+{
+    rawImage = img;
+    timer->stop();
+    progressValue=100.0;
+    estimatedSeconds=0;
+    setProgressReadyStyle();
+    updateTimeLabel();
+    setBusy(false);
+
+    callPreviewUpdater();
+}
+
+void MainWindow::onDeviceListFound(QStringList devices)
+{
+    deviceBtn->setEnabled(true);
+    deviceBtn->setText("Choose Device");
+
+    if (devices.isEmpty())
+        return;
+
+    QStringList labels;
+    for (const QString &d : devices)
+        labels << d.section('|',1,1);
+
+    bool ok;
+    QString selected =
+        QInputDialog::getItem(this,
+                              "Select Scanner",
+                              "Device:",
+                              labels,
+                              0,
+                              false,
+                              &ok);
+
+    if (!ok || selected.isEmpty())
+        return;
+
+    int index = labels.indexOf(selected);
+    QString deviceId = devices[index].section('|',0,0);
+
+    scanWorker->setDeviceName(deviceId);
+    deviceEdit->setText(selected);
+
+    scanDpiBox->setPlaceholderText("Polling…");
+    previewDpiBox->setPlaceholderText("Polling…");
+    QMetaObject::invokeMethod(scanWorker, "requestCapabilities");
+}
+
+// ----/ SIGNALS 
