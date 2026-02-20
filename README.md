@@ -12,10 +12,18 @@ QFiSc - QT Film Scanner supporting **Plustek** and possibly other **SANE-support
 
 ---
 
-# Usage
+## Usage
 
-Examples added here.
+Simply run as executable  
+    
+```./QFilmScanner```
 
+**Preview** does lowest found resolution scan, and does not save by default.  
+Previewing does not require choosing a folder.
+
+**Scan** does highest found resolution scan, and saves immediately after scan.
+
+**Saving** overrides similarly named frame without prompt.
 
 ## Features
 
@@ -26,10 +34,20 @@ Examples added here.
 - Embedded UI font for consistent look (Montserrat)  
 - Status bar
 
-# Tested devices
+## Tested devices
 
 Tested devices list can be found from [here](docs/SUPPORTED.md).   
 The build started for Plustek OpticFilm 7400, but supports any SANE-supported devices, found [here](http://www.sane-project.org/sane-mfgs.html#Z-PLUSTEK).  
+
+## Building
+
+This software requires sane-backends and QT6 features for building.
+
+## Coming features
+
+ - Dark mode support dynamically from OS in development
+ - 8-bit depth calculations for image transformations
+ - *Your help* with testing and reporting other scanner times, resolutions and quirks. I will personally ever only own one anyway.
 
 - - -
 Made with QT6. Made with SANE-backend. Made with love, luck and freedom.
