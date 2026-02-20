@@ -37,6 +37,7 @@ private:
     QPushButton *prevBtn;
     QPushButton *folderBtn;
     QPushButton *deviceBtn;
+    QPushButton *saveAgain;
 
     QCheckBox *colorswitch;
     QCheckBox *bitswitch;
@@ -47,10 +48,14 @@ private:
     QComboBox *previewDpiBox;
     QComboBox *scanDpiBox;
 
+    QComboBox *saveType;
+    QComboBox *saveMethod;
+
     QCheckBox *slideSwitch;
     QCheckBox *flipSwitch;
     QCheckBox *upsideSwitch;
     QCheckBox *rawSwitch;
+    QCheckBox *mirrorSwitch;
 
     QList<QShortcut*> shortcuts;
 // Internal state
@@ -86,9 +91,10 @@ private slots:
     void onPrev();
     void onChooseFolder();
     void onChooseDevice();
+    void onSaveRequest();
 
 // helpers
-    void updateFrameLabel();
+    void updateLabels();
     void updateTimeLabel();
     void setProgressReadyStyle();
     void setProgressScanningStyle();
@@ -101,4 +107,6 @@ private slots:
     void onScanStarted(int estimatedSeconds);
     void onScanFinished(const QImage &img);
     void onImageReady(const QImage &img);
+    void onSaveComplete(bool success);
+    void onPreviewFinished(const QImage &img);
 };

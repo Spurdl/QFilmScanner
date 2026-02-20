@@ -318,7 +318,7 @@ void ScanWorker::requestPreview(const ScanParameters &params)
 
     QImage img = performScan(params);
 
-    emit scanFinished(img);
+    emit previewFinished(img);
 }
 
 void ScanWorker::requestScan(const ScanParameters &params)

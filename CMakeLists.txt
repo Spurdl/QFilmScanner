@@ -8,11 +8,18 @@ find_package(Qt6 REQUIRED COMPONENTS Widgets)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SANE REQUIRED sane-backends)
 
-add_executable(QFilmScanner
+#qt6_add_resources(QFilmScanner "fonts/MontserratLight.ttf"
+#    PREFIX "/fonts"
+#    FILES "fonts/MontserratLight.ttf")
+
+qt_add_resources(sourcesrcc ${CMAKE_CURRENT_SOURCE_DIR}/resources.qrc)
+
+qt6_add_executable(QFilmScanner
     src/main.cpp
     src/MainWindow.cpp
     src/workers/ScanWorker.cpp
     src/workers/ImageWorker.cpp
+    ${sourcesrcc}
 )
 
 target_include_directories(QFilmScanner PRIVATE

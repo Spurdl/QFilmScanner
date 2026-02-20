@@ -47,6 +47,7 @@ public slots:
 signals:
     void scanStarted(int estimatedSeconds);
     void scanFinished(const QImage &img);
+    void previewFinished(const QImage &img);
     void deviceListReady(QStringList devices);
     void capabilitiesReady(const ScannerCapabilities &caps);
 

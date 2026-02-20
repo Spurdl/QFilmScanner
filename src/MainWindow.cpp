@@ -4,6 +4,7 @@
 
 #include <QHBoxLayout>
 #include <QVBoxLayout>
+#include <QGridLayout>
 #include <QFileDialog>
 #include <QInputDialog>
 #include <QImage>
@@ -22,7 +23,7 @@
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
-    setWindowTitle(QString("QFilmScanner  QFiSc 1.0.0"));
+    setWindowTitle(QString("QFilmScanner  /  QFiSc"));
     auto *central = new QWidget;
     setCentralWidget(central);
 
@@ -43,11 +44,14 @@ MainWindow::MainWindow(QWidget *parent)
     prevBtn = new QPushButton("<");
     deviceBtn = new QPushButton("Choose Device");
     folderBtn = new QPushButton("Choose Folder");
+    saveAgain = new QPushButton("Save Again");
+    saveAgain->setEnabled(false);
     colorswitch = new QCheckBox("Color");
     bitswitch = new QCheckBox("16 Bits");
     slideSwitch = new QCheckBox("R");
     flipSwitch = new QCheckBox("↻");
-    upsideSwitch = new QCheckBox("⭂");
+    mirrorSwitch = new QCheckBox("⇄");
+    upsideSwitch = new QCheckBox("⇅");
     rawSwitch = new QCheckBox("⎘");
     bitswitch->setChecked(true);
     bitswitch->setEnabled(false);
@@ -91,6 +95,12 @@ MainWindow::MainWindow(QWidget *parent)
     previewDpiBox->setEnabled(false);
     scanDpiBox->setEnabled(false);
 
+    saveType = new QComboBox;
+    saveMethod = new QComboBox;
+    saveType->addItems(supportedSaveTypes);
+    saveMethod->addItems(supportedSaveMethods);
+    saveType->setCurrentIndex(2);
+
     timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, &MainWindow::updateTimeLabel);
 
@@ -133,13 +143,22 @@ MainWindow::MainWindow(QWidget *parent)
     togetherToo->addLayout(UpDown);
     togetherToo->addLayout(UpDownToo);
 
+    // SAVE SELECTION
+    auto *saveLayout = new QGridLayout;
+    saveLayout->addWidget(new QLabel("Save method"),0,0);
+    saveLayout->addWidget(new QLabel("File type")  ,0,1);
+    saveLayout->addWidget(saveMethod,1,0);
+    saveLayout->addWidget(saveType,1,1);
+
     leftLayout->addLayout(together);
     leftLayout->addSpacing(10);
     leftLayout->addLayout(togetherToo);
     leftLayout->addStretch();
+    leftLayout->addLayout(saveLayout);
     leftLayout->addWidget(previewBtn);
     leftLayout->addWidget(scanBtn);
-    leftLayout->addSpacing(20);
+    leftLayout->addWidget(saveAgain);
+    leftLayout->addSpacing(15);
 
     // IMAGE EDIT LAYOUT
     auto *imageLayout = new QHBoxLayout;
@@ -149,6 +168,8 @@ MainWindow::MainWindow(QWidget *parent)
     imageLayout->addWidget(flipSwitch);
     imageLayout->addSpacing(40);
     imageLayout->addWidget(upsideSwitch);
+    imageLayout->addSpacing(40);
+    imageLayout->addWidget(mirrorSwitch);
     imageLayout->addSpacing(40);
     imageLayout->addWidget(rawSwitch);
     imageLayout->setAlignment(Qt::AlignCenter);
@@ -172,6 +193,32 @@ MainWindow::MainWindow(QWidget *parent)
     masterLayout->addLayout(horizontalLayout);
     masterLayout->addSpacing(2);
     masterLayout->addWidget(line2);
+
+    // FOOTER
+    auto *footerLayout = new QHBoxLayout;
+    footerLayout->setContentsMargins(5, 2, 5, 2);
+    footerLayout->addStretch();
+    
+    QLabel *githubLabel = new QLabel("<a href=\"https://github.com/Spurdl/QFilmScanner\" "
+                                     "style=\"color: gray; text-decoration: none; font-size:9pt;\">Github ↗</a>");
+    githubLabel->setTextFormat(Qt::RichText);
+    githubLabel->setTextInteractionFlags(Qt::TextBrowserInteraction);
+    githubLabel->setOpenExternalLinks(true);
+    githubLabel->setFixedHeight(16); 
+
+    footerLayout->addWidget(githubLabel);
+
+    QLabel *versionLabel = new QLabel("v1.0.0");
+    versionLabel->setStyleSheet("color: gray; font-size: 9pt;");
+    footerLayout->addSpacing(40);
+    footerLayout->addWidget(versionLabel);
+
+    QWidget *footerWidget = new QWidget;
+    footerWidget->setLayout(footerLayout);
+    footerWidget->setStyleSheet("background-color: #fafafa;");
+    footerWidget->setFixedHeight(18); 
+
+    masterLayout->addWidget(footerWidget);
 
     central->setLayout(masterLayout);
 
@@ -213,6 +260,12 @@ MainWindow::MainWindow(QWidget *parent)
     connect(scanWorker, &ScanWorker::deviceListReady,
             this, &MainWindow::onDeviceListFound);
 
+    connect(editWorker, &ImageWorker::saveComplete,
+            this, &MainWindow::onSaveComplete);
+
+    connect(saveAgain, &QPushButton::clicked,
+            this, &MainWindow::onSaveRequest);
+
     connect(previewBtn, &QPushButton::clicked,
             this, &MainWindow::onPreview);
 
@@ -235,13 +288,15 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(scanWorker, &ScanWorker::capabilitiesReady,
         this, &MainWindow::onCapabilitiesReady);
-    
 
     connect(scanWorker, &ScanWorker::scanStarted,
             this, &MainWindow::onScanStarted);
 
     connect(scanWorker, &ScanWorker::scanFinished,
             this, &MainWindow::onScanFinished);
+
+    connect(scanWorker, &ScanWorker::previewFinished,
+        this, &MainWindow::onPreviewFinished);
 
     connect(previewDpiBox, &QComboBox::currentIndexChanged,
             this, [this](int index)
@@ -263,8 +318,13 @@ MainWindow::MainWindow(QWidget *parent)
             this, &MainWindow::callPreviewUpdater);
     connect(upsideSwitch, &QCheckBox::checkStateChanged, 
             this, &MainWindow::callPreviewUpdater);
+    connect(mirrorSwitch, &QCheckBox::checkStateChanged, 
+            this, &MainWindow::callPreviewUpdater);
+    connect(rawSwitch, &QCheckBox::checkStateChanged, 
+            this, &MainWindow::callPreviewUpdater);
 
-    updateFrameLabel();
+
+    updateLabels();
     workerThread[0].start();
     workerThread[1].start();
 }
@@ -311,13 +371,6 @@ void MainWindow::setBusy(bool busy)
 {
     isBusy = busy;
 
-    previewBtn->setEnabled(!busy);
-    scanBtn->setEnabled(!busy);
-    nextBtn->setEnabled(!busy);
-    prevBtn->setEnabled(!busy);
-    folderBtn->setEnabled(!busy);
-    colorswitch->setEnabled(!busy);
-
     for (auto *sc : shortcuts)
         sc->setEnabled(!busy);
 
@@ -325,10 +378,24 @@ void MainWindow::setBusy(bool busy)
         statusBar()->showMessage("Scanning...");
     else
         statusBar()->showMessage("Ready");
+    updateLabels();
 }
 
-void MainWindow::updateFrameLabel()
+void MainWindow::updateLabels()
 {
+    previewBtn->setEnabled(!isBusy);
+    scanBtn->setEnabled(!isBusy);
+    nextBtn->setEnabled(!isBusy);
+    prevBtn->setEnabled(!isBusy);
+    folderBtn->setEnabled(!isBusy);
+    colorswitch->setEnabled(!isBusy);
+
+    if(!rawImage.isNull()){
+        saveAgain->setEnabled(true);
+    } else {
+        saveAgain->setEnabled(false);
+    }
+
     frameLabel->setText(
         QString("Frame %1").arg(frameIndex, 3, 10, QChar('0'))
     );
@@ -336,15 +403,12 @@ void MainWindow::updateFrameLabel()
 
 void MainWindow::updateTimeLabel()
 {
-    if (progressValue < 100)
-    {
+    if (progressValue < 100){
         progressValue += (100.0 / (maxTime+1)); 
         if (progressValue > 100) progressValue = 100.0;
-        
     }
 
-    if (estimatedSeconds > 0)
-    {
+    if (estimatedSeconds > 0){
         estimatedSeconds--;
     }
 
@@ -363,6 +427,32 @@ void MainWindow::updateTimeLabel()
 
 // ----/ HELPERS
 // ---- BUTTONS
+
+void MainWindow::onSaveRequest(){
+
+    ImageEditParams params;
+
+    params.turn = flipSwitch->checkState();
+    params.invert = !slideSwitch->checkState();
+    params.mirror_v = upsideSwitch->checkState();
+    params.mirror_h = mirrorSwitch->checkState();
+    params.autolevel = !rawSwitch->checkState();
+    params.saveMethod = saveMethod->currentText();
+    params.saveType = saveType->currentText();
+
+    QMetaObject::invokeMethod(editWorker,
+                    "saveImage",
+                    Q_ARG(QImage, rawImage),
+                    Q_ARG(QString, outputFolder),
+                    Q_ARG(int, frameIndex),
+                    Q_ARG(ImageEditParams, params));
+
+    statusBar()->showMessage(
+        QString("Saving image..."),
+        5000);
+    
+    return;
+}
 
 void MainWindow::onChooseFolder()
 {
@@ -420,14 +510,18 @@ void MainWindow::onScan()
 void MainWindow::onNext()
 {
     frameIndex++;
-    updateFrameLabel();
+    imageLabel->clearPreview();
+    rawImage = QImage();
+    updateLabels();
 }
 
 void MainWindow::onPrev()
 {
     if (frameIndex > 0)
         frameIndex--;
-    updateFrameLabel();
+    imageLabel->clearPreview();
+    rawImage = QImage();
+    updateLabels();
 }
 
 void MainWindow::onChooseDevice()
@@ -445,6 +539,9 @@ void MainWindow::onPreview()
     if (scanWorker->getDeviceName().isEmpty())
         return;
 
+    if( currentCaps.maxDpi == 0)
+        return;
+    
     currentParams.color = colorswitch->isChecked();
     currentParams.dpi = previewDpi;  
 
@@ -457,6 +554,7 @@ void MainWindow::onPreview()
 // ----/ BUTTONS
 
 // ---- SIGNALS 
+
 void MainWindow::onCapabilitiesReady(const ScannerCapabilities &caps)
 {
     previewDpiBox->setPlaceholderText("");
@@ -544,8 +642,9 @@ void MainWindow::callPreviewUpdater(){
 
     params.turn = flipSwitch->checkState();
     params.invert = !slideSwitch->checkState();
-    params.mirror = upsideSwitch->checkState();
-    params.autolevel = true;
+    params.mirror_v = upsideSwitch->checkState();
+    params.mirror_h = mirrorSwitch->checkState();
+    params.autolevel = !rawSwitch->checkState();
 
     QMetaObject::invokeMethod(editWorker,
                           "processImage",
@@ -558,8 +657,7 @@ void MainWindow::callPreviewUpdater(){
         QString("%1/scan_%2.png")
             .arg(params.outputFolder)
             .arg(params.frameIndex, 3, 10, QChar('0'));*/
-void MainWindow::onScanFinished(const QImage &img)
-{
+void MainWindow::onScanFinished(const QImage &img){
     rawImage = img;
     timer->stop();
     progressValue=100.0;
@@ -569,6 +667,21 @@ void MainWindow::onScanFinished(const QImage &img)
     setBusy(false);
 
     callPreviewUpdater();
+
+    onSaveRequest();
+}
+
+void MainWindow::onPreviewFinished(const QImage &img){
+    rawImage = img;
+    timer->stop();
+    progressValue=100.0;
+    estimatedSeconds=0;
+    setProgressReadyStyle();
+    updateTimeLabel();
+    setBusy(false);
+
+    callPreviewUpdater();
+
 }
 
 void MainWindow::onDeviceListFound(QStringList devices)
@@ -605,6 +718,20 @@ void MainWindow::onDeviceListFound(QStringList devices)
     scanDpiBox->setPlaceholderText("Polling…");
     previewDpiBox->setPlaceholderText("Polling…");
     QMetaObject::invokeMethod(scanWorker, "requestCapabilities");
+}
+
+void MainWindow::onSaveComplete(bool success){
+    if(success){
+        statusBar()->showMessage(
+            QString("Saving successful!"),
+            5000);
+    }
+    else{
+        statusBar()->showMessage(
+            QString("Saving failed!"),
+            5000);
+    }
+    return;
 }
 
 // ----/ SIGNALS 

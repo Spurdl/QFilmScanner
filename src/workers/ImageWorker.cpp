@@ -1,9 +1,18 @@
 #include <vector>
 #include <algorithm>
 
+#include <QDir>
 #include <QTransform>
 
 #include "ImageWorker.h"
+
+QList<QString> supportedSaveMethods = {
+    "Raw", "Edited", "Raw + Edited"
+};
+
+QList<QString> supportedSaveTypes = {
+    "JPEG", "PNG", "TIFF", "WEBP", "BMP"
+};
 
 QImage autoLevel(const QImage &src, double lowPercent, double highPercent)
 {
@@ -128,14 +137,13 @@ QImage flip90degrees(const QImage &src){
     return img;
 }
 
-QImage mirror(const QImage &src){
+QImage mirror(const QImage &src, Qt::Orientation orientation){
     QImage img = src;
-    img = img.flipped(Qt::Orientation::Horizontal);
+    img = img.flipped(orientation);
     return img;
 }
 
-void ImageWorker::processImage(const QImage &img, const ImageEditParams &params)
-{
+void ImageWorker::processImage(const QImage &img, const ImageEditParams &params){
     if (img.isNull()) {
         emit imageProcessed(img);
         return;
@@ -147,8 +155,12 @@ void ImageWorker::processImage(const QImage &img, const ImageEditParams &params)
         result = flip90degrees(result);
     }
 
-    if (params.mirror){
-        result = mirror(result);
+    if (params.mirror_v){
+        result = mirror(result, Qt::Orientation::Vertical);
+    }
+
+    if (params.mirror_h){
+        result = mirror(result, Qt::Orientation::Horizontal);
     }
 
     if (params.invert) {
@@ -160,4 +172,86 @@ void ImageWorker::processImage(const QImage &img, const ImageEditParams &params)
     }
 
     emit imageProcessed(result);
+}
+
+QImage ImageWorker::processInternally(const QImage &img, const ImageEditParams &params){
+    QImage result = img.copy();
+
+    if (params.turn){
+        result = flip90degrees(result);
+    }
+
+    if (params.mirror_v){
+        result = mirror(result, Qt::Orientation::Vertical);
+    }
+
+    if (params.mirror_h){
+        result = mirror(result, Qt::Orientation::Horizontal);
+    }
+
+    if (params.invert) {
+        result = invert(result);
+    }
+
+    if (params.autolevel) {
+        result = autoLevel(result, 0.01, 0.99);
+    }
+
+    return result;
+}
+
+bool ImageWorker::saveWithSuffix(const QImage &img, QString saveLocation, int frameIdx, const ImageEditParams &params, const QString &suffix){
+    QString extension = params.saveType.toLower();
+    QString frameStr = QString("%1").arg(frameIdx, 3, 10, QChar('0'));
+
+    QDir dir(saveLocation);
+    QString baseName = dir.filePath(frameStr);
+    
+    QImage result;
+    if(suffix.compare("edit", Qt::CaseInsensitive) == 0){
+        result = processInternally(img, params);
+    }
+    else{
+        result = img.copy();
+    }
+
+    QString fileName = QString("%1_%2_frame.%3")
+                            .arg(baseName)
+                            .arg(suffix)
+                            .arg(extension);
+
+    QImageWriter writer(fileName, params.saveType.toUtf8());
+
+    if (params.saveType.compare("JPEG", Qt::CaseInsensitive) == 0)
+        writer.setQuality(95);
+
+    if (!writer.write(result)) {
+        qWarning() << "Failed to save:" << fileName
+                << writer.errorString();
+        return false;
+    }
+    return true;
+};
+
+void ImageWorker::saveImage(const QImage &image, QString saveLocation, int frameIdx, const ImageEditParams &params){
+    if (image.isNull()){
+        emit saveComplete(false);
+        return;
+    }
+
+    bool success;
+    if (params.saveMethod.compare("Raw", Qt::CaseInsensitive) == 0) {
+        success = saveWithSuffix(image, saveLocation, frameIdx, params, "raw");
+    }
+    else if (params.saveMethod.compare("Edited", Qt::CaseInsensitive) == 0) {
+        success = saveWithSuffix(image, saveLocation, frameIdx, params,"edit");
+    }
+    else if (params.saveMethod.compare("Raw + Edited", Qt::CaseInsensitive) == 0) {
+        success = saveWithSuffix(image, saveLocation, frameIdx, params,"raw");
+        success &= saveWithSuffix(image, saveLocation, frameIdx, params,"edit");
+    }
+
+    emit saveComplete(success);
+    
+    return;
 }

@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/">
+        <file>fonts/MontserratLight.ttf</file>
+    </qresource>
+</RCC>
