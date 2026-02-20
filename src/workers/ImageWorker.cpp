@@ -33,7 +33,6 @@ QImage autoLevel(const QImage &src, double lowPercent, double highPercent)
         std::vector<uint16_t> gVec(width*height);
         std::vector<uint16_t> bVec(width*height);
 
-        // Copy data into vectors
         for(int y = 0; y < height; ++y)
         {
             auto row = reinterpret_cast<uint16_t*>(img.scanLine(y));
