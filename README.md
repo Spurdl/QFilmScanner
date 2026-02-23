@@ -4,7 +4,6 @@
 [![SANE](https://img.shields.io/badge/backend-SANE-orange)](http://www.sane-project.org/)
 [![Build](https://img.shields.io/badge/build-CMake-064F8C?logo=cmake&logoColor=white)](https://cmake.org/)
 [![License](https://img.shields.io/badge/license-GPLv3-blue)](https://www.gnu.org/licenses/gpl-3.0)
-![GitHub release](https://img.shields.io/github/v/release/Spurdl/QFilmScanner)  
 
 QFiSc - QT Film Scanner supporting **Plustek** and possibly other **SANE-supported flatbed devices**, on Linux!
 
