@@ -16,36 +16,26 @@ QFiSc - QT Film Scanner supporting **Plustek** and possibly other **SANE-support
     <img src="images/Empty.png" alt="Empty" width="450">
     <img src="images/Scandone.png" alt="Scan Done" width="450">
 </div>
-
+    
 ---
 
-## Installation via prebuilt binaries
-
-This app does not bundle SANE inside the binary, and is required to be installed on the system itself.    
-Include by adding in your package manager.  
+## Installation via building
  
-**Arch**  
-```sudo pacman -S sane```  
+Building dependencies are:  
+- **QT 6.9+**  
+- **CMake 3.16+**
+- **C++17 compiler**
+- **QT Image formats**
 
-**Debian / Ubuntu**  
-```sudo apt install sane```  
+Minimum dependencies are for arch-based distro   
+```sudo pacman -S qt6-base qt6-imageformats sane cmake pkgconf base-devel```
 
-## Installation from package:
+For debian  
+```sudo apt install build-essential cmake pkg-config qt6-base-dev qt6-image-formats-plugins libsane-dev```
 
-**Arch**
-```sudo pacman -U qfilmscanner-*.pkg.tar.zst```  
-Runtime dependencies are:  
-- qt6-base 6.9+  
-- qt6-imageformats  
-- sane  
 
-**Debian / Ubuntu**  
-```sudo dpkg -i qfilmscanner_*.deb```
-```sudo apt -f install```
-Runtime dependencies are handled automatically:
-- qt6-base
-- qt6-image-formats-plugins
-- libsane
+Build with the CMake and Make. 
+
 
 ## Usage 
 
@@ -82,36 +72,17 @@ Space can be used to start scan immediately.
 Tested devices list can be found from [here](docs/SUPPORTED.md).   
 The build started for Plustek OpticFilm 7400, but supports any SANE-supported devices, found [here](http://www.sane-project.org/sane-mfgs.html#Z-PLUSTEK).  
 
-## Building
-
-This software requires some additional libraries  
-- **QT 6.9+**  
-- **CMake 3.16+**
-- **C++17 compiler**
-
-Additionally, it is required to install  
-- **qt6-imageformats**
-- **sane-backends**
-
-Minimum dependencies are for arch-based distro   
-```sudo pacman -S qt6-base qt6-imageformats sane cmake pkgconf base-devel```
-
-For debian  
-```sudo apt install build-essential cmake pkg-config qt6-base-dev qt6-image-formats-plugins libsane-dev```
-
-### For deployment
-
-Deployment requires additional software depending on build target.  
-Packaging uses:
-- linuxdeploy
-- linuxdeploy-plugin-qt
-- CPack (for .deb and .rpm)
-
 ## Coming features
 
+ - Arch / Debian packages
+ - AppImage building
+ - Device tested runtimes
+ - Device-specific configs
  - Dark mode support dynamically from OS in development
  - 8-bit depth calculations for image transformations
  - *Your help* with testing and reporting other scanner times, resolutions and quirks. I will personally ever only own one anyway.
 
 - - -
-Made with QT6. Made with SANE-backend. Made with love, luck and freedom.
+Version 0.1.0 - [Pride versioning](https://pridever.org/)
+- - -
+Made with QT6. Made with SANE-backend. Made with love.

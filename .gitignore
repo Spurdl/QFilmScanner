@@ -47,6 +47,7 @@ debub/
 Debug/
 release/
 Release/
+pkg/
 
 # remove test folders
 *.tiff

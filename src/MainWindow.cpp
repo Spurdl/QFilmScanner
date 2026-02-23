@@ -208,7 +208,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     footerLayout->addWidget(githubLabel);
 
-    QLabel *versionLabel = new QLabel("v1.0.0");
+    QLabel *versionLabel = new QLabel("v0.1.0");
     versionLabel->setStyleSheet("color: gray; font-size: 9pt;");
     footerLayout->addSpacing(40);
     footerLayout->addWidget(versionLabel);
