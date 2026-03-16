@@ -2,6 +2,7 @@
 #include <fstream>
 #include <cmath>
 
+#include <QApplication>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QGridLayout>
@@ -17,6 +18,7 @@
 #include <QStyleHints>
 
 #include "MainWindow.h"
+#include "helpers/helpers.h"
 #include "workers/ScanWorker.h"
 #include "workers/ImageWorker.h"
 
@@ -208,7 +210,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     footerLayout->addWidget(githubLabel);
 
-    QLabel *versionLabel = new QLabel("v0.1.0");
+    QLabel *versionLabel = new QLabel("v0.2.0");
     versionLabel->setStyleSheet("color: gray; font-size: 9pt;");
     footerLayout->addSpacing(40);
     footerLayout->addWidget(versionLabel);
@@ -233,14 +235,15 @@ MainWindow::MainWindow(QWidget *parent)
             this, &MainWindow::onNext);
     shortcuts.append(rightShortcut);
 
-    auto *enterShortcut = new QShortcut(QKeySequence(Qt::Key_Return), this);
+    auto *enterShortcut = new QShortcut(QKeySequence(Qt::Key_Up), this);
     connect(enterShortcut, &QShortcut::activated,
+            this, &MainWindow::onPreview);
+    shortcuts.append(enterShortcut);
+
+    auto *enterShortcut2 = new QShortcut(QKeySequence(Qt::Key_Down), this);
+    connect(enterShortcut2, &QShortcut::activated,
             this, &MainWindow::onScan);
-    shortcuts.append(enterShortcut);
-
-    auto *enterShortcut2 = new QShortcut(QKeySequence(Qt::Key_Enter), this);
-
-    shortcuts.append(enterShortcut);
+    shortcuts.append(enterShortcut2);
 
     // Worker thread
     scanWorker = new ScanWorker;
@@ -500,6 +503,8 @@ void MainWindow::onScan()
     currentParams.dpi = scanDpi;
     currentParams.outputFolder = outputFolder;
     currentParams.frameIndex = frameIndex;
+    currentParams.cap = currentCaps;
+    currentParams.profile = currentProfile; 
 
     QMetaObject::invokeMethod(scanWorker,
                               "requestScan",
@@ -662,13 +667,13 @@ void MainWindow::onScanFinished(const QImage &img){
     timer->stop();
     progressValue=100.0;
     estimatedSeconds=0;
-    setProgressReadyStyle();
-    updateTimeLabel();
     setBusy(false);
 
+    setProgressReadyStyle();
+    updateTimeLabel();
     callPreviewUpdater();
-
     onSaveRequest();
+    QApplication::beep();
 }
 
 void MainWindow::onPreviewFinished(const QImage &img){
@@ -676,9 +681,10 @@ void MainWindow::onPreviewFinished(const QImage &img){
     timer->stop();
     progressValue=100.0;
     estimatedSeconds=0;
+    setBusy(false);
+
     setProgressReadyStyle();
     updateTimeLabel();
-    setBusy(false);
 
     callPreviewUpdater();
 

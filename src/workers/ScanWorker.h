@@ -3,6 +3,9 @@
 #include <QObject>
 #include <QImage>
 #include <QString>
+#include "../helpers/helpers.h"
+
+#include "../device_quirks/scanProfiles.h"
 
 struct ScannerCapabilities
 {
@@ -12,19 +15,27 @@ struct ScannerCapabilities
 
     QList<int> supportedBitDepths;
     QStringList supportedSources;
+    QString transparencySource;
 
     bool supportsTransparency = false;
+    bool supports8Bit = false;
     bool supports16Bit = false;
+
+    QString stdSource = "Flatbed";
+    QString filmSource = "Transparency Adapter";
+
+    const ScannerQuirks* quirks = nullptr;
 };
 
 struct ScanParameters
 {
-    int dpi = 0;
     bool color = true;
+    int dpi = 0;
     int bitDepth = 16;
-    QString source = "Transparency Adapter";
-    QString outputFolder;
     int frameIndex = 0;
+
+    QString outputFolder;
+    const ScannerCapabilities* cap = nullptr;
 };
 
 Q_DECLARE_METATYPE(ScanParameters)

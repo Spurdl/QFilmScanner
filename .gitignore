@@ -55,3 +55,7 @@ pkg/
 testimages/
 test/
 tests
+.vscode/
+*.vscode/
+*.code/
+.code/

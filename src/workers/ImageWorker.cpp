@@ -28,6 +28,40 @@ QImage autoLevel(const QImage &src, double lowPercent, double highPercent)
         return (val - p0) * 65535 / (p100 - p0);
     };
 
+    auto computePercentilesNew = [lowPercent, highPercent](const std::vector<uint16_t> &data) -> std::pair<uint16_t, uint16_t> {
+        if (data.empty()) return {0, 65535};
+
+        // 1. Build Histogram
+        std::vector<uint32_t> hist(65536, 0);
+        for (uint16_t val : data) hist[val]++;
+
+        // 2. Find Low Threshold
+        uint32_t lowThresholdCount = data.size() * lowPercent;
+        uint32_t sum = 0;
+        uint16_t p0 = 0;
+        for (int i = 0; i < 65536; ++i) {
+            sum += hist[i];
+            if (sum >= lowThresholdCount) {
+                p0 = i;
+                break;
+            }
+        }
+
+        // 3. Find High Threshold
+        uint32_t highThresholdCount = data.size() * (1.0 - highPercent);
+        sum = 0;
+        uint16_t p100 = 65535;
+        for (int i = 65535; i >= 0; --i) {
+            sum += hist[i];
+            if (sum >= highThresholdCount) {
+                p100 = i;
+                break;
+            }
+        }
+
+        return {p0, p100};
+    };
+
     auto computePercentiles = [lowPercent, highPercent](const std::vector<uint16_t> &data) -> std::pair<uint16_t,uint16_t> {
         std::vector<uint16_t> copy = data;
         std::sort(copy.begin(), copy.end());
@@ -53,9 +87,9 @@ QImage autoLevel(const QImage &src, double lowPercent, double highPercent)
             }
         }
 
-        auto [r0,r100] = computePercentiles(rVec);
-        auto [g0,g100] = computePercentiles(gVec);
-        auto [b0,b100] = computePercentiles(bVec);
+        auto [r0,r100] = computePercentilesNew(rVec);
+        auto [g0,g100] = computePercentilesNew(gVec);
+        auto [b0,b100] = computePercentilesNew(bVec);
 
         for(int y = 0; y < height; ++y)
         {
@@ -79,7 +113,7 @@ QImage autoLevel(const QImage &src, double lowPercent, double highPercent)
                 grayVec[y*width + x] = row[x];
         }
 
-        auto [g0,g100] = computePercentiles(grayVec);
+        auto [g0,g100] = computePercentilesNew(grayVec);
 
         for(int y = 0; y < height; ++y)
         {

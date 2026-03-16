@@ -5,6 +5,7 @@
 #include <QList>
 #include <QTransform>
 #include <QImageWriter>
+#include "../helpers/helpers.h"
 
 struct ImageEditParams {
     bool turn           = false;

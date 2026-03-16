@@ -61,6 +61,7 @@ private:
 // Internal state
     ScanParameters currentParams;
     ScannerCapabilities currentCaps;
+    ScannerProfile currentProfile;
 
     bool isBusy = false;
     bool deviceReady = false;

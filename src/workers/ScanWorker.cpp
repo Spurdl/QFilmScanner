@@ -4,62 +4,42 @@
 #include <fstream>
 #include <sane/sane.h>
 
-#include <QDebug>
-
+#include <QtEndian>
 #include "ScanWorker.h"
-#include "../device_quirks/scanProfiles.h"
 
 ScanWorker::ScanWorker(QObject *parent)
-    : QObject(parent)
+    : QObject(parent) {}
+
+static uint16_t convertGray(uint16_t r, uint16_t g, uint16_t b, const ScannerProfile* p)
 {
+    switch (p->grayMethod){
+        case ScannerProfile::GREEN_CHANNEL:
+            return g;
+        case ScannerProfile::RGB_WEIGHTED:
+            return (uint16_t)(0.299 * r + 0.587 * g + 0.114 * b);
+        default:
+            return g;
+    }
 }
 
-#define SCAN_DEBUG 1
-
-#if SCAN_DEBUG
-#define DBG qDebug()
-#else
-#define DBG if(false) qDebug()
-#endif
-
-static bool setOptionByName(SANE_Handle handle,
-                            const char* name,
-                            void* value)
-{
-    for (int i = 0;; ++i)
-    {
-        const SANE_Option_Descriptor* opt =
-            sane_get_option_descriptor(handle, i);
-
-        if (!opt)
+static bool setOptionByName(SANE_Handle handle, const char* name, void* value){
+    for (int i = 0;; ++i) {
+        const SANE_Option_Descriptor* opt = sane_get_option_descriptor(handle, i);
+        if (!opt) {
             break;
-
-        if (opt->name && strcmp(opt->name, name) == 0)
-        {
-            SANE_Status st =
-                sane_control_option(handle,
-                                    i,
-                                    SANE_ACTION_SET_VALUE,
-                                    value,
-                                    nullptr);
-
-            //qDebug() << "Setting option"
-            //         << name
-            //         << "status:"
-            //         << sane_strstatus(st);
-
+        }
+        if (opt->name && strcmp(opt->name, name) == 0) {
+            SANE_Status st = sane_control_option(handle, i, SANE_ACTION_SET_VALUE, value, nullptr);
             return (st == SANE_STATUS_GOOD);
         }
     }
-
-    qDebug() << "Option not found:" << name;
+    DBG << "Option not found:" << name;
     return false;
 }
 
 ScannerCapabilities ScanWorker::readCapabilities()
 {
     ScannerCapabilities caps;
-
     sane_init(nullptr,nullptr);
 
     SANE_Handle handle;
@@ -73,7 +53,6 @@ ScannerCapabilities ScanWorker::readCapabilities()
 
         if (!opt)
             break;
-
         if (!opt->name)
             continue;
 
@@ -108,33 +87,36 @@ ScannerCapabilities ScanWorker::readCapabilities()
             }
         }
 
-        if (strcmp(opt->name, "depth") == 0)
-        {
-            if (opt->constraint_type == SANE_CONSTRAINT_WORD_LIST)
-            {
+        if (strcmp(opt->name, "depth") == 0) {
+            if (opt->constraint_type == SANE_CONSTRAINT_WORD_LIST) {
                 int count = opt->constraint.word_list[0];
-                for (int j = 1; j <= count; ++j)
-                {
+                for (int j = 1; j <= count; ++j) {
                     int d = opt->constraint.word_list[j];
                     caps.supportedBitDepths.append(d);
-                    if (d == 16)
+                    if(d == 16){
                         caps.supports16Bit = true;
+                    }
+                    if(d == 8){
+                        caps.supports8Bit = true;
+                    }
                 }
             }
         }
 
-        if (strcmp(opt->name, "source") == 0)
-        {
-            if (opt->constraint_type == SANE_CONSTRAINT_STRING_LIST)
-            {
+        if (strcmp(opt->name, "source") == 0) {
+            if (opt->constraint_type == SANE_CONSTRAINT_STRING_LIST) {
                 const SANE_String_Const* list = opt->constraint.string_list;
-                for (int j = 0; list[j] != nullptr; ++j)
-                {
+                for (int j = 0; list[j] != nullptr; ++j) {
                     QString s = QString::fromUtf8(list[j]);
                     caps.supportedSources.append(s);
 
-                    if (s.contains("Transparency", Qt::CaseInsensitive))
+                    if (s.contains("Transparen", Qt::CaseInsensitive) || s.contains("TPU", Qt::CaseInsensitive)){   // Transparen - cy or -t Unit etc
+                        caps.filmSource = s;
                         caps.supportsTransparency = true;
+                    }
+                    else{
+                        caps.stdSource = s;
+                    }
                 }
             }
         }
@@ -142,12 +124,6 @@ ScannerCapabilities ScanWorker::readCapabilities()
 
     sane_close(handle);
     sane_exit();
-
-    //qDebug() << "Found max/min dpi" << caps.maxDpi << "/" << caps.minDpi;
-    //qDebug() << "16bit / Transparency" << caps.supports16Bit << "/" << caps.supportsTransparency; 
-    //qDebug() << "All supported" << caps.supportedBitDepths;
-    //qDebug() << "Rest supported" << caps.supportedResolutions;
-    //qDebug() << "Sources" << caps.supportedSources << "\n";
 
     return caps;
 }
@@ -161,21 +137,20 @@ void ScanWorker::requestDeviceList()
 
     QStringList devices;
 
-    if(device_list)
-    {
-        for(int i=0; device_list[i]; ++i)
-        {
+    if(device_list) {
+        for(int i=0; device_list[i]; ++i) {
             QString id = device_list[i]->name;
 
             QString label;
 
-            if (device_list[i]->vendor && device_list[i]->model)
+            if (device_list[i]->vendor && device_list[i]->model){
                 label = QString("%1 %2")
                             .arg(device_list[i]->vendor)
                             .arg(device_list[i]->model);
-            else
+            }
+            else{
                 label = id;  // fallback if no nice name
-
+            }
             devices << QString("%1|%2").arg(id).arg(label);
         }
     }
@@ -195,20 +170,36 @@ QImage ScanWorker::performScan(const ScanParameters &params)
 {
     sane_init(nullptr,nullptr);
 
-    //qDebug() << ;
-
     SANE_Handle handle;
-    if (sane_open(deviceName.toUtf8().constData(), &handle) != SANE_STATUS_GOOD)
-        return {};
 
+    if (sane_open(deviceName.toUtf8().constData(), &handle) != SANE_STATUS_GOOD){
+        DBG << "Error opening device";
+        return {};
+    }
+
+    // Params
     SANE_Int resolution = params.dpi;
+    QByteArray sourceUtf8;
+    if(params.supportsTransparency){
+       sourceUtf8 = params.cap->filmSource.toUtf8();
+    } else{
+        sourceUtf8 = params.cap->stdSource.toUtf8();
+    }
+    
     setOptionByName(handle, "resolution", &resolution);
-    setOptionByName(handle, "source", (void*)"Transparency Adapter");
-    const char* mode = params.color ? "Color" : "Gray";
+    setOptionByName(handle, "source",  sourceUtf8.data());
+    const char* gray;
+    if(params.profile->grayMethod != ScannerProfile::SCANNER_NATIVE){
+        gray = "Color";
+    } else{
+        gray = "Gray";
+    }
+    const char* mode = params.color ? "Color" : gray;
 
     sane_control_option(handle, 2, SANE_ACTION_SET_VALUE,
                        (void*)mode, nullptr);
 
+    // Scanning
     sane_start(handle);
 
     SANE_Parameters sp;
@@ -217,18 +208,7 @@ QImage ScanWorker::performScan(const ScanParameters &params)
     int width = sp.pixels_per_line;
     int height = sp.lines;
     int bytesPerSample = sp.depth / 8;
-    int channels = (sp.format == SANE_FRAME_RGB) ? 3 :
-                   (sp.format == SANE_FRAME_GRAY) ? 1 : 0;
-
-    // Only allow 16-bit scans for now
-    if (sp.depth != 16 || channels == 0)
-    {
-        sane_close(handle);
-        sane_exit();
-        return {};
-    }
-
-    
+    int channels = (sp.format == SANE_FRAME_RGB) ? 3 : 1; 
 
     size_t totalBytes = width * height * channels * bytesPerSample;
     std::vector<uint8_t> data(totalBytes);
@@ -237,84 +217,83 @@ QImage ScanWorker::performScan(const ScanParameters &params)
     SANE_Int len;
     size_t offset = 0;
 
-    while ((status = sane_read(handle,
-                               data.data() + offset,
-                               data.size() - offset,
-                               &len)) == SANE_STATUS_GOOD)
-    {
+    
+
+    while ((status = sane_read(handle, data.data() + offset, data.size() - offset, &len)) == SANE_STATUS_GOOD) {
         offset += len;
         int percent = (offset * 100) / totalBytes;
-        // emit progress(percent);
     }
 
     sane_close(handle);
     sane_exit();
 
-    if (status != SANE_STATUS_EOF || offset != totalBytes)
+    if (status != SANE_STATUS_EOF || offset != totalBytes) {
+        DBG << "NO IMAGE OR ERROR DURING SCANNING";
         return {};
+    }
 
-    if (sp.format == SANE_FRAME_RGB)
-    {
+    // Image finalization
+
+    QImage img;
+
+    if (sp.format == SANE_FRAME_RGB){
+        qDebug("FOUND RGB IMAGE");
         std::vector<uint16_t> rgba(width * height * 4);
         uint16_t* src = reinterpret_cast<uint16_t*>(data.data());
 
         int samplesPerRow = sp.bytes_per_line / 2;
-        int channels = 3;
 
-        for (int y = 0; y < height; ++y)
+        if (params.color) 
         {
-            uint16_t* row = src + y * samplesPerRow;
-            for (int x = 0; x < width; ++x)
-            {
-                rgba[(y*width + x)*4 + 0] = row[x*channels + 0];
-                rgba[(y*width + x)*4 + 1] = row[x*channels + 1];
-                rgba[(y*width + x)*4 + 2] = row[x*channels + 2];
-                rgba[(y*width + x)*4 + 3] = 65535; // full alpha
+            std::vector<uint16_t> rgba(width * height * 4);
+            for (int y = 0; y < height; ++y) {
+                uint16_t* row = src + y * samplesPerRow;
+                for (int x = 0; x < width; ++x) {
+                    rgba[(y*width + x)*4 + 0] = row[x*3 + 0];
+                    rgba[(y*width + x)*4 + 1] = row[x*3 + 1];
+                    rgba[(y*width + x)*4 + 2] = row[x*3 + 2];
+                    rgba[(y*width + x)*4 + 3] = 65535;
+                }
+            }
+            img = QImage(reinterpret_cast<const uchar*>(rgba.data()), width, height, QImage::Format_RGBX64);
+        }
+
+        else 
+        {
+            img = QImage(width, height, QImage::Format_Grayscale16);
+            for (int y = 0; y < height; ++y) {
+                uint16_t* srcRow = src + y * samplesPerRow;
+                uint16_t* dstRow = reinterpret_cast<uint16_t*>(img.scanLine(y));
+                for (int x = 0; x < width; ++x) {
+                    dstRow[x] = convertGray(
+                        srcRow[x*3 + 0],
+                        srcRow[x*3 + 1],
+                        srcRow[x*3 + 2],
+                        params.profile
+                    );
+                }
             }
         }
 
-        QImage img(reinterpret_cast<const uchar*>(rgba.data()),
-                width,
-                height,
-                QImage::Format_RGBX64);
+    }
+    else{
+        return {};
+    }
 
-        const int STRIPE_WIDTH = 60; // hardware stripe width
+    const int STRIPE_WIDTH = params.profile->calibrationStrip;; // hardware stripe width
         if (width > STRIPE_WIDTH)
         {
             QImage cropped = img.copy(STRIPE_WIDTH, 0, width - STRIPE_WIDTH, height);
             img = cropped;
             width -= STRIPE_WIDTH;
         }
-
-        return img.copy();
-    }
-
-    if (sp.format == SANE_FRAME_GRAY)
-    {
-        QImage img(reinterpret_cast<const uchar*>(data.data()),
-                   width,
-                   height,
-                   QImage::Format_Grayscale16);
-
-        const int STRIPE_WIDTH = 60; // hardware stripe width, idk whats wrong with my plustek
-        if (width > STRIPE_WIDTH)
-        {
-            QImage cropped = img.copy(STRIPE_WIDTH, 0, width - STRIPE_WIDTH, height);
-            img = cropped;
-            width -= STRIPE_WIDTH;
-        }
-
-
-        return img.copy();
-    }
-
-    return {};
+    return img.copy();
 }
 
 void ScanWorker::requestPreview(const ScanParameters &params)
 {
-    int eta = ScanProfiles::estimateSeconds(deviceName, params.dpi);
-    emit scanStarted(eta); // estimate
+    //int eta = ScanProfiles::estimateSeconds(deviceName, params.dpi);
+    emit scanStarted(20); // estimate
 
     QImage img = performScan(params);
 
@@ -323,8 +302,8 @@ void ScanWorker::requestPreview(const ScanParameters &params)
 
 void ScanWorker::requestScan(const ScanParameters &params)
 {
-    int eta = ScanProfiles::estimateSeconds(deviceName, params.dpi);
-    emit scanStarted(eta); // estimate only
+    //int eta = ScanProfiles::estimateSeconds(deviceName, params.dpi);
+    emit scanStarted(75); // estimate only
 
     QImage img = performScan(params);
     
