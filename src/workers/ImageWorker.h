@@ -24,7 +24,7 @@ class ImageWorker : public QObject
 {
     Q_OBJECT
 public:
-    ImageWorker(QObject *parent = nullptr) : QObject(parent) {}
+    ImageWorker(QObject *parent = nullptr) : QObject(parent) {};
 
 public slots:
     void processImage(const QImage &img, const ImageEditParams &params);

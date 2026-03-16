@@ -5,10 +5,17 @@
 #include <QString>
 #include "../helpers/helpers.h"
 
-#include "../device_quirks/scanProfiles.h"
+#include "../devices/deviceQuirks.h"
 
 struct ScannerCapabilities
 {
+    enum BitDepths {
+        NONE = 0,
+        ONLY_8_BIT = 1,
+        ONLY_16_BIT = 2,
+        BOTH_16_8_BIT = 3
+    };
+
     QList<int> supportedResolutions;
     int minDpi = 0;
     int maxDpi = 0;
@@ -18,13 +25,12 @@ struct ScannerCapabilities
     QString transparencySource;
 
     bool supportsTransparency = false;
-    bool supports8Bit = false;
-    bool supports16Bit = false;
+    BitDepths bitDepth = ScannerCapabilities::NONE;
 
     QString stdSource = "Flatbed";
     QString filmSource = "Transparency Adapter";
 
-    const ScannerQuirks* quirks = nullptr;
+    const DeviceQuirks* quirks = nullptr;
 };
 
 struct ScanParameters
@@ -33,7 +39,8 @@ struct ScanParameters
     int dpi = 0;
     int bitDepth = 16;
     int frameIndex = 0;
-
+    
+    QString source;
     QString outputFolder;
     const ScannerCapabilities* cap = nullptr;
 };

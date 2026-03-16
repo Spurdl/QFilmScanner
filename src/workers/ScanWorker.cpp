@@ -7,19 +7,25 @@
 #include <QtEndian>
 #include "ScanWorker.h"
 
+#define WEIGHT_R 0.299
+#define WEIGHT_G 0.587
+#define WEIGHT_B 0.114 
+
 ScanWorker::ScanWorker(QObject *parent)
     : QObject(parent) {}
 
-static uint16_t convertGray(uint16_t r, uint16_t g, uint16_t b, const ScannerProfile* p)
+// Helpers
+
+static uint16_t convertGray(uint16_t r, uint16_t g, uint16_t b, const DeviceQuirks* p)
 {
     switch (p->grayMethod){
-        case ScannerProfile::GREEN_CHANNEL:
+        case DeviceQuirks::GREEN_CHANNEL:
             return g;
-        case ScannerProfile::RGB_WEIGHTED:
-            return (uint16_t)(0.299 * r + 0.587 * g + 0.114 * b);
+        case DeviceQuirks::RGB_WEIGHTED:
+            return (uint16_t)(WEIGHT_R * r + WEIGHT_G * g + WEIGHT_B * b);
         default:
             return g;
-    }
+    };
 }
 
 static bool setOptionByName(SANE_Handle handle, const char* name, void* value){
@@ -37,6 +43,8 @@ static bool setOptionByName(SANE_Handle handle, const char* name, void* value){
     return false;
 }
 
+// Device calls
+
 ScannerCapabilities ScanWorker::readCapabilities()
 {
     ScannerCapabilities caps;
@@ -48,40 +56,34 @@ ScannerCapabilities ScanWorker::readCapabilities()
 
     for (int i = 0;; ++i)
     {
-        const SANE_Option_Descriptor* opt =
-            sane_get_option_descriptor(handle, i);
+        const SANE_Option_Descriptor* opt = sane_get_option_descriptor(handle, i);
 
-        if (!opt)
-            break;
-        if (!opt->name)
-            continue;
+        if (!opt) {
+            break;}
+        if (!opt->name) {
+            continue;}
 
-        if (strcmp(opt->name, "resolution") == 0)
-        {
-            if (opt->constraint_type == SANE_CONSTRAINT_RANGE)
-            {
+        if (strcmp(opt->name, "resolution") == 0) {
+            if (opt->constraint_type == SANE_CONSTRAINT_RANGE) {
                 const SANE_Range* r = opt->constraint.range;
                 caps.minDpi = r->min;
                 caps.maxDpi = r->max;
 
-                for (int v = r->min; v <= r->max; v += r->quant)
+                for (int v = r->min; v <= r->max; v += r->quant) {
                     caps.supportedResolutions.append(v);
+                }
             }
-            else if (opt->constraint_type == SANE_CONSTRAINT_WORD_LIST)
-            {
+            else if (opt->constraint_type == SANE_CONSTRAINT_WORD_LIST) {
                 int count = opt->constraint.word_list[0];
-                for (int j = 1; j <= count; ++j)
-                    caps.supportedResolutions.append(
-                        opt->constraint.word_list[j]);
+                for (int j = 1; j <= count; ++j){
+                    caps.supportedResolutions.append(opt->constraint.word_list[j]);
+                }
 
-                if (!caps.supportedResolutions.isEmpty())
-                {
-                    caps.minDpi =
-                        *std::min_element(caps.supportedResolutions.begin(),
+                if (!caps.supportedResolutions.isEmpty()) {
+                    caps.minDpi = *std::min_element(caps.supportedResolutions.begin(),
                                           caps.supportedResolutions.end());
 
-                    caps.maxDpi =
-                        *std::max_element(caps.supportedResolutions.begin(),
+                    caps.maxDpi = *std::max_element(caps.supportedResolutions.begin(),
                                           caps.supportedResolutions.end());
                 }
             }
@@ -93,11 +95,11 @@ ScannerCapabilities ScanWorker::readCapabilities()
                 for (int j = 1; j <= count; ++j) {
                     int d = opt->constraint.word_list[j];
                     caps.supportedBitDepths.append(d);
-                    if(d == 16){
-                        caps.supports16Bit = true;
-                    }
                     if(d == 8){
-                        caps.supports8Bit = true;
+                        caps.bitDepth = static_cast<ScannerCapabilities::BitDepths>(caps.bitDepth | ScannerCapabilities::ONLY_8_BIT);
+                    }
+                    else if(d == 16){
+                        caps.bitDepth = static_cast<ScannerCapabilities::BitDepths>(caps.bitDepth | ScannerCapabilities::ONLY_16_BIT);
                     }
                 }
             }
@@ -125,45 +127,9 @@ ScannerCapabilities ScanWorker::readCapabilities()
     sane_close(handle);
     sane_exit();
 
+
+
     return caps;
-}
-
-void ScanWorker::requestDeviceList()
-{
-    sane_init(nullptr,nullptr);
-
-    const SANE_Device **device_list = nullptr;
-    sane_get_devices(&device_list,SANE_FALSE);
-
-    QStringList devices;
-
-    if(device_list) {
-        for(int i=0; device_list[i]; ++i) {
-            QString id = device_list[i]->name;
-
-            QString label;
-
-            if (device_list[i]->vendor && device_list[i]->model){
-                label = QString("%1 %2")
-                            .arg(device_list[i]->vendor)
-                            .arg(device_list[i]->model);
-            }
-            else{
-                label = id;  // fallback if no nice name
-            }
-            devices << QString("%1|%2").arg(id).arg(label);
-        }
-    }
-
-    sane_exit();
-
-    emit deviceListReady(devices);
-}
-
-void ScanWorker::requestCapabilities()
-{
-    ScannerCapabilities caps = readCapabilities();
-    emit capabilitiesReady(caps);
 }
 
 QImage ScanWorker::performScan(const ScanParameters &params)
@@ -179,17 +145,11 @@ QImage ScanWorker::performScan(const ScanParameters &params)
 
     // Params
     SANE_Int resolution = params.dpi;
-    QByteArray sourceUtf8;
-    if(params.supportsTransparency){
-       sourceUtf8 = params.cap->filmSource.toUtf8();
-    } else{
-        sourceUtf8 = params.cap->stdSource.toUtf8();
-    }
-    
+    QByteArray src = params.source.toUtf8();
     setOptionByName(handle, "resolution", &resolution);
-    setOptionByName(handle, "source",  sourceUtf8.data());
+    setOptionByName(handle, "source", src.data());
     const char* gray;
-    if(params.profile->grayMethod != ScannerProfile::SCANNER_NATIVE){
+    if(params.cap->quirks->grayMethod != DeviceQuirks::GrayMethod::SCANNER_NATIVE){
         gray = "Color";
     } else{
         gray = "Gray";
@@ -217,8 +177,7 @@ QImage ScanWorker::performScan(const ScanParameters &params)
     SANE_Int len;
     size_t offset = 0;
 
-    
-
+    // SCAN !!!
     while ((status = sane_read(handle, data.data() + offset, data.size() - offset, &len)) == SANE_STATUS_GOOD) {
         offset += len;
         int percent = (offset * 100) / totalBytes;
@@ -269,7 +228,7 @@ QImage ScanWorker::performScan(const ScanParameters &params)
                         srcRow[x*3 + 0],
                         srcRow[x*3 + 1],
                         srcRow[x*3 + 2],
-                        params.profile
+                        params.cap->quirks
                     );
                 }
             }
@@ -280,7 +239,7 @@ QImage ScanWorker::performScan(const ScanParameters &params)
         return {};
     }
 
-    const int STRIPE_WIDTH = params.profile->calibrationStrip;; // hardware stripe width
+    const int STRIPE_WIDTH = params.cap->quirks->calibrationStrip;; // hardware stripe width
         if (width > STRIPE_WIDTH)
         {
             QImage cropped = img.copy(STRIPE_WIDTH, 0, width - STRIPE_WIDTH, height);
@@ -289,6 +248,8 @@ QImage ScanWorker::performScan(const ScanParameters &params)
         }
     return img.copy();
 }
+
+// Public Slots
 
 void ScanWorker::requestPreview(const ScanParameters &params)
 {
@@ -308,4 +269,37 @@ void ScanWorker::requestScan(const ScanParameters &params)
     QImage img = performScan(params);
     
     emit scanFinished(img);
+}
+
+void ScanWorker::requestCapabilities() {
+    ScannerCapabilities caps = readCapabilities();
+    emit capabilitiesReady(caps);
+}
+
+void ScanWorker::requestDeviceList() {
+    sane_init(nullptr,nullptr);
+
+    const SANE_Device **device_list = nullptr;
+    sane_get_devices(&device_list,SANE_FALSE);
+
+    QStringList devices;
+
+    if(device_list) {
+        for(int i=0; device_list[i]; ++i) {
+            QString id = device_list[i]->name;
+            QString label;
+
+            if (device_list[i]->vendor && device_list[i]->model){
+                label = QString("%1 %2")
+                            .arg(device_list[i]->vendor)
+                            .arg(device_list[i]->model);
+            } else {
+                label = id;  // fallback if no nice name
+            }
+            devices << QString("%1|%2").arg(id).arg(label);
+        }
+    }
+    sane_exit();
+
+    emit deviceListReady(devices);
 }

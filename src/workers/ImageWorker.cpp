@@ -161,20 +161,18 @@ QImage invert(const QImage &src)
 }
 
 QImage upsideDown(const QImage &src){
-    QImage img = src;
-    img = img.flipped(Qt::Orientation::Vertical);
-    return img;
+    return src.mirrored(false, true);
 }
 
 QImage flip90degrees(const QImage &src){
-    QImage img = src.transformed(QTransform().rotate(90));
-    return img;
+    return src.transformed(QTransform().rotate(90));
 }
 
 QImage mirror(const QImage &src, Qt::Orientation orientation){
-    QImage img = src;
-    img = img.flipped(orientation);
-    return img;
+    if (orientation == Qt::Vertical)
+        return src.mirrored(false, true);
+    else
+        return src.mirrored(true, false);
 }
 
 void ImageWorker::processImage(const QImage &img, const ImageEditParams &params){

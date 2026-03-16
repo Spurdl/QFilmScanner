@@ -3,13 +3,9 @@
 #include <QString>
 #include <QMap>
 
-class DeviceQuirks
-{
-public:
+struct DeviceQuirks{
     QString modelName;
     QString usbId;
-    QString backend; 
-    QString vendor;
 
     bool trueGray = false;        // real grayscale sensor
     bool rgbSensor = true;        // RGB Bayer / tri-linear CCD
@@ -25,6 +21,13 @@ public:
     QMap<int,int> dpiToSeconds;  
 
     GrayMethod grayMethod = GREEN_CHANNEL;
-private:
+};
 
+class DeviceFinder {
+    Q_OBJECT
+public slots:
+    static bool findDeviceQuirksByUsbId(QString usbId, DeviceQuirks& quirks);
+    static bool findDeviceQuirksByModel(QString modelName, DeviceQuirks& quirks);
+public:
+private:
 };

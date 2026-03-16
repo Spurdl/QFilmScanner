@@ -7,21 +7,13 @@ DeviceQuirks loadProfile(QString path)
 
     auto tbl = toml::parse_file(path.toStdString());
 
-    q.modelName = QString::fromStdString(
-        tbl["modelName"].value_or("")
-    );
+    q.modelName = QString::fromStdString( tbl["modelName"].value_or("") );
 
-    q.vendor = QString::fromStdString(
-        tbl["vendor"].value_or("")
-    );
+    q.vendor = QString::fromStdString( tbl["vendor"].value_or("") );
 
-    q.backend = QString::fromStdString(
-        tbl["backend"].value_or("")
-    );
+    q.backend = QString::fromStdString( tbl["backend"].value_or("") );
 
-    q.usbId = QString::fromStdString(
-        tbl["usbId"].value_or("")
-    );
+    q.usbId = QString::fromStdString(tbl["usbId"].value_or(""));
 
     q.trueGray = tbl["trueGray"].value_or(false);
     q.rgbSensor = tbl["rgbSensor"].value_or(true);
@@ -29,17 +21,17 @@ DeviceQuirks loadProfile(QString path)
 
     std::string gm = tbl["grayMethod"].value_or("GREEN_CHANNEL");
 
-    if (gm == "GREEN_CHANNEL")
+    if (gm == "GREEN_CHANNEL"){
         q.grayMethod = DeviceQuirks::GREEN_CHANNEL;
+    }
 
-    if (gm == "RGB_WEIGHTED")
+    if (gm == "RGB_WEIGHTED"){
         q.grayMethod = DeviceQuirks::RGB_WEIGHTED;
-
-    if (gm == "SCANNER_NATIVE")
+    }
+    if (gm == "SCANNER_NATIVE"){
         q.grayMethod = DeviceQuirks::SCANNER_NATIVE;
-
-    if (auto dpi = tbl["dpiToSeconds"].as_table())
-    {
+    }
+    if (auto dpi = tbl["dpiToSeconds"].as_table()) {
         for (auto& [k,v] : *dpi)
         {
             int d = std::stoi(k.str());

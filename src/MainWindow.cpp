@@ -29,7 +29,12 @@ MainWindow::MainWindow(QWidget *parent)
     auto *central = new QWidget;
     setCentralWidget(central);
 
-    bool dark = QGuiApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark;
+    bool dark;
+    #if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
+    dark = QGuiApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark;
+    #else
+    dark = QApplication::palette().color(QPalette::Window).lightness() < 128;
+    #endif
 
     qRegisterMetaType<ScanParameters>("ScanParameters");
     qRegisterMetaType<ScannerCapabilities>("ScannerCapabilities");
@@ -315,15 +320,15 @@ MainWindow::MainWindow(QWidget *parent)
             scanDpiBox->itemData(index).toInt();
     });
 
-    connect(flipSwitch, &QCheckBox::checkStateChanged, 
+    connect(flipSwitch, &QCheckBox::stateChanged, 
             this, &MainWindow::callPreviewUpdater);
-    connect(slideSwitch, &QCheckBox::checkStateChanged, 
+    connect(slideSwitch, &QCheckBox::stateChanged, 
             this, &MainWindow::callPreviewUpdater);
-    connect(upsideSwitch, &QCheckBox::checkStateChanged, 
+    connect(upsideSwitch, &QCheckBox::stateChanged, 
             this, &MainWindow::callPreviewUpdater);
-    connect(mirrorSwitch, &QCheckBox::checkStateChanged, 
+    connect(mirrorSwitch, &QCheckBox::stateChanged, 
             this, &MainWindow::callPreviewUpdater);
-    connect(rawSwitch, &QCheckBox::checkStateChanged, 
+    connect(rawSwitch, &QCheckBox::stateChanged, 
             this, &MainWindow::callPreviewUpdater);
 
 
@@ -503,8 +508,7 @@ void MainWindow::onScan()
     currentParams.dpi = scanDpi;
     currentParams.outputFolder = outputFolder;
     currentParams.frameIndex = frameIndex;
-    currentParams.cap = currentCaps;
-    currentParams.profile = currentProfile; 
+    currentParams.cap = &currentCaps;
 
     QMetaObject::invokeMethod(scanWorker,
                               "requestScan",
@@ -577,13 +581,9 @@ void MainWindow::onCapabilitiesReady(const ScannerCapabilities &caps)
 
 
     currentParams.dpi = caps.minDpi;
-    currentParams.bitDepth =
-        caps.supports16Bit ? 16 : 8;
+    currentParams.bitDepth = caps.bitDepth == ScannerCapabilities::ONLY_16_BIT ? 16 : 8;
 
-    currentParams.source =
-        caps.supportsTransparency ?
-        "Transparency Adapter" :
-        caps.supportedSources.value(0);
+    currentParams.source = caps.supportsTransparency ? caps.filmSource : caps.stdSource;
 
     previewDpiBox->clear();
     scanDpiBox->clear();
