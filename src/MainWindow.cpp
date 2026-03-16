@@ -581,14 +581,17 @@ void MainWindow::onCapabilitiesReady(const ScannerCapabilities &caps)
 
 
     currentParams.dpi = caps.minDpi;
-    currentParams.bitDepth = caps.bitDepth == ScannerCapabilities::ONLY_16_BIT ? 16 : 8;
+    currentParams.bitDepth = caps.bitDepth == ScannerCapabilities::BitDepths::ONLY_16_BIT ? 16 : 8;
 
     currentParams.source = caps.supportsTransparency ? caps.filmSource : caps.stdSource;
 
     previewDpiBox->clear();
     scanDpiBox->clear();
+    bool supports16 = ((caps.bitDepth == ScannerCapabilities::BitDepths::BOTH_16_8_BIT) || (caps.bitDepth == ScannerCapabilities::BitDepths::ONLY_16_BIT));
+    bitswitch->setEnabled(caps.bitDepth == ScannerCapabilities::BitDepths::BOTH_16_8_BIT);
+    bitswitch->setChecked(supports16);
 
-    for (int dpi : caps.supportedResolutions)
+    for (int dpi : caps.supportedResolutions)BOTH_16_8_BIT
     {
         previewDpiBox->addItem(QString::number(dpi), dpi);
         scanDpiBox->addItem(QString::number(dpi), dpi);

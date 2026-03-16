@@ -33,8 +33,9 @@ For debian , QT6
 ```sudo apt install build-essential cmake pkg-config qt6-base-dev qt6-image-formats-plugins libsane-dev```
 
 
-Build with the CMake and Make. 
-
+Build with the CMake  
+```rm -rf build && mkdir build && cd build```  
+```cmake .. && cmake --build .```  
 
 ## Usage 
 
@@ -54,9 +55,10 @@ Previewing does not require choosing a folder.
 - **⇅ Mirror** vertically.
 - **⎘ No depth scaling**. Removes auto-level scaling.
 
-**Shortcuts** are used to quickly change frames. Arrow keys to right move frame counter up, and left move back.  
-Space can be used to start scan immediately.
-
+**Shortcuts** are used to quickly change frames when scanning.   
+Arrow keys to right move frame counter up, and left move back.  
+Arrow UP does a previw scan.
+Arrow DOWN does a full scan.
 ## Features
 
 - Scan previews and final frames  
@@ -82,6 +84,6 @@ The build started for Plustek OpticFilm 7400, but supports any SANE-supported de
  - *Your help* with testing and reporting other scanner times, resolutions and quirks. I will personally ever only own one anyway.
 
 - - -
-Version 0.1.0 - [Pride versioning](https://pridever.org/)
+Version 0.2.0 - [Pride versioning](https://pridever.org/)
 - - -
 Made with QT6. Made with SANE-backend. Made with love.

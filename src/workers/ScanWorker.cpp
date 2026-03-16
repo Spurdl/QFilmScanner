@@ -144,6 +144,7 @@ QImage ScanWorker::performScan(const ScanParameters &params)
     }
 
     // Params
+    const int bytecount = params.bitDepth / 8;
     SANE_Int resolution = params.dpi;
     QByteArray src = params.source.toUtf8();
     setOptionByName(handle, "resolution", &resolution);
@@ -196,11 +197,11 @@ QImage ScanWorker::performScan(const ScanParameters &params)
     QImage img;
 
     if (sp.format == SANE_FRAME_RGB){
-        qDebug("FOUND RGB IMAGE");
+        DBG << "FOUND RGB IMAGE";
         std::vector<uint16_t> rgba(width * height * 4);
         uint16_t* src = reinterpret_cast<uint16_t*>(data.data());
 
-        int samplesPerRow = sp.bytes_per_line / 2;
+        int samplesPerRow = sp.bytes_per_line / bytecount;
 
         if (params.color) 
         {
@@ -234,18 +235,37 @@ QImage ScanWorker::performScan(const ScanParameters &params)
             }
         }
 
-    }
-    else{
+    } else if (sp.format == SANE_FRAME_GRAY) {
+        DBG << "FOUND GRAYSCALE IMAGE";
+
+        std::vector<uint16_t> gray(width * height);
+        uint16_t* src = reinterpret_cast<uint16_t*>(data.data());
+
+        int samplesPerRow = sp.bytes_per_line / bytecount;
+        img = QImage(width, height, QImage::Format_Grayscale16);
+        for (int y = 0; y < height; ++y) {
+            uint16_t* srcRow = src + y * samplesPerRow;
+            uint16_t* dstRow = reinterpret_cast<uint16_t*>(img.scanLine(y));
+            for (int x = 0; x < width; ++x) {
+                dstRow[x] = convertGray(
+                    srcRow[x*3 + 0],
+                    srcRow[x*3 + 1],
+                    srcRow[x*3 + 2],
+                    params.cap->quirks
+                );
+            }
+        }
+    } else{
         return {};
     }
-
-    const int STRIPE_WIDTH = params.cap->quirks->calibrationStrip;; // hardware stripe width
-        if (width > STRIPE_WIDTH)
-        {
-            QImage cropped = img.copy(STRIPE_WIDTH, 0, width - STRIPE_WIDTH, height);
+    const int calibration_stripe = params.cap->quirks->calibrationStrip;; // hardware stripe width
+    if(calibration_stripe != 0){
+        if (width > calibration_stripe) {
+            QImage cropped = img.copy(calibration_stripe, 0, width - calibration_stripe, height);
             img = cropped;
-            width -= STRIPE_WIDTH;
+            width -= calibration_stripe;
         }
+    }
     return img.copy();
 }
 
