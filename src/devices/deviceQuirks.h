@@ -8,6 +8,8 @@ class DeviceQuirks
 public:
     QString modelName;
     QString usbId;
+    QString backend; 
+    QString vendor;
 
     bool trueGray = false;        // real grayscale sensor
     bool rgbSensor = true;        // RGB Bayer / tri-linear CCD
