@@ -21,7 +21,7 @@ QFiSc - QT Film Scanner supporting **Plustek** and possibly other **SANE-support
 ## Installation via building
  
 Building dependencies are:  
-- **QT 6.9+**  
+- **QT 5.15 up to 6.10**  
 - **CMake 3.16+**
 - **C++17 compiler**
 - **QT Image formats**
@@ -29,7 +29,7 @@ Building dependencies are:
 Minimum dependencies are for arch-based distro   
 ```sudo pacman -S qt6-base qt6-imageformats sane cmake pkgconf base-devel```
 
-For debian  
+For debian , QT6
 ```sudo apt install build-essential cmake pkg-config qt6-base-dev qt6-image-formats-plugins libsane-dev```
 
 
