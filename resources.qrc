@@ -1,5 +1,7 @@
 <RCC>
     <qresource prefix="/">
         <file>fonts/MontserratLight.ttf</file>
+        
+        <file>profiles/plustek.toml</file>
     </qresource>
 </RCC>

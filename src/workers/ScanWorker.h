@@ -4,7 +4,6 @@
 #include <QImage>
 #include <QString>
 #include "../helpers/helpers.h"
-
 #include "../devices/deviceQuirks.h"
 
 struct ScannerCapabilities
@@ -29,8 +28,6 @@ struct ScannerCapabilities
 
     QString stdSource = "Flatbed";
     QString filmSource = "Transparency Adapter";
-
-    const DeviceQuirks* quirks = nullptr;
 };
 
 struct ScanParameters
@@ -57,8 +54,8 @@ public:
     void setDeviceName(const QString &name) { deviceName = name; };
 
 public slots:
-    void requestPreview(const ScanParameters &params);
-    void requestScan(const ScanParameters &params);
+    void requestPreview(const ScanParameters &params, const DeviceQuirks &quirks);
+    void requestScan(const ScanParameters &params, const DeviceQuirks &quirks);
     void requestDeviceList();
     void requestCapabilities();
     
@@ -71,6 +68,6 @@ signals:
 
 private:    
     QString deviceName;
-    QImage performScan(const ScanParameters &params);
+    QImage performScan(const ScanParameters &params, const DeviceQuirks &quirks);
     ScannerCapabilities readCapabilities();
 };

@@ -21,6 +21,7 @@
 #include "helpers/helpers.h"
 #include "workers/ScanWorker.h"
 #include "workers/ImageWorker.h"
+#include "devices/deviceQuirks.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -29,6 +30,8 @@ MainWindow::MainWindow(QWidget *parent)
     auto *central = new QWidget;
     setCentralWidget(central);
 
+    DeviceQuirkDatabase::loadProfiles();
+    
     bool dark;
     #if QT_VERSION >= QT_VERSION_CHECK(6,5,0)
     dark = QGuiApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark;
@@ -397,7 +400,7 @@ void MainWindow::updateLabels()
     prevBtn->setEnabled(!isBusy);
     folderBtn->setEnabled(!isBusy);
     colorswitch->setEnabled(!isBusy);
-
+ 
     if(!rawImage.isNull()){
         saveAgain->setEnabled(true);
     } else {
@@ -510,10 +513,7 @@ void MainWindow::onScan()
     currentParams.frameIndex = frameIndex;
     currentParams.cap = &currentCaps;
 
-    QMetaObject::invokeMethod(scanWorker,
-                              "requestScan",
-                              Q_ARG(ScanParameters,
-                                    currentParams));
+    QMetaObject::invokeMethod(scanWorker, "requestScan", Q_ARG(ScanParameters, currentParams), Q_ARG(DeviceQuirks, currentQuirks));
 }
 
 void MainWindow::onNext()
@@ -554,10 +554,7 @@ void MainWindow::onPreview()
     currentParams.color = colorswitch->isChecked();
     currentParams.dpi = previewDpi;  
 
-    QMetaObject::invokeMethod(scanWorker,
-                              "requestPreview",
-                              Q_ARG(ScanParameters,
-                                    currentParams));
+    QMetaObject::invokeMethod(scanWorker, "requestPreview", Q_ARG(ScanParameters, currentParams), Q_ARG(DeviceQuirks, currentQuirks));
 }
 
 // ----/ BUTTONS
@@ -591,7 +588,7 @@ void MainWindow::onCapabilitiesReady(const ScannerCapabilities &caps)
     bitswitch->setEnabled(caps.bitDepth == ScannerCapabilities::BitDepths::BOTH_16_8_BIT);
     bitswitch->setChecked(supports16);
 
-    for (int dpi : caps.supportedResolutions)BOTH_16_8_BIT
+    for (int dpi : caps.supportedResolutions)
     {
         previewDpiBox->addItem(QString::number(dpi), dpi);
         scanDpiBox->addItem(QString::number(dpi), dpi);
@@ -721,8 +718,15 @@ void MainWindow::onDeviceListFound(QStringList devices)
     int index = labels.indexOf(selected);
     QString deviceId = devices[index].section('|',0,0);
 
+    if (!DeviceQuirkDatabase::findByFriendlyName(selected, currentQuirks)){
+        DBG << "Unsupported device!";
+        return;
+    }
+
     scanWorker->setDeviceName(deviceId);
     deviceEdit->setText(selected);
+
+   // DBG << "We have: " << currentCaps.quirks->manufacturer;
 
     scanDpiBox->setPlaceholderText("Polling…");
     previewDpiBox->setPlaceholderText("Polling…");

@@ -1,0 +1,66 @@
+manufacturer = "Template"
+vendorId = "1234"
+
+[default]
+modelName = "Generic"
+names = [""]
+trueGray = false
+rgbSensor = false
+calibrationStrip = 0
+grayMethod = "rgb_median"
+
+[default.dpiToSeconds]
+300 = 20
+600 = 30
+900 = 35
+1200 = 40
+1800 = 45
+2600 = 50
+3600 = 55
+4800 = 70
+7200 = 90
+9600 = 150
+
+[[device]]
+modelName = "Speeder 1000"
+names = ["TEMPLATE Speeder 1000 v1"]
+trueGray = false
+rgbSensor = true
+calibrationStrip = 0
+grayMethod = "green_channel"
+
+[device.dpiToSeconds]
+900 = 30
+1800 = 40
+3600 = 80
+7200 = 100
+
+[[device]]
+modelName = "Template 2000"
+names = ["TEMPLATE Speeder 2000 (v1)", "TEMPLATE Speeder 2000 (v2)"]
+trueGray = false
+rgbSensor = false
+calibrationStrip = 0
+grayMethod = "rgb_weighted"
+
+[device.dpiToSeconds]
+900 = 20
+1800 = 30
+3600 = 70
+7200 = 90
+
+[[device]]
+modelName = "Template 6000"
+names = ["TEMPLATE 6000 Pro (v1.1)"]
+trueGray = true
+rgbSensor = true
+calibrationStrip = 70
+grayMethod = "scanner_native"
+
+[device.dpiToSeconds]
+300 = 1
+900 = 2
+1800 = 3
+3600 = 4
+7200 = 5
+9600 = 8

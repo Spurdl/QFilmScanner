@@ -23,7 +23,7 @@ int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
     
-    listResources();
+    //listResources();
 
     int id = QFontDatabase::addApplicationFont(":/fonts/MontserratLight.ttf");
     if (id == -1){

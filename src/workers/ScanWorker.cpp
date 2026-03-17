@@ -7,14 +7,24 @@
 #include <QtEndian>
 #include "ScanWorker.h"
 
-#define WEIGHT_R 0.299
-#define WEIGHT_G 0.587
-#define WEIGHT_B 0.114 
+#define WEIGHT_R 0.2 //0.299
+#define WEIGHT_G 0.7 //0.587
+#define WEIGHT_B 0.1 //0.114 
 
 ScanWorker::ScanWorker(QObject *parent)
     : QObject(parent) {}
 
 // Helpers
+
+static inline uint16_t median3(uint16_t a, uint16_t b, uint16_t c) {
+    if (a > b) {
+        if (b > c) return b;
+        return (a > c) ? c : a;
+    } else {
+        if (a > c) return a;
+        return (b > c) ? c : b;
+    }
+}
 
 static uint16_t convertGray(uint16_t r, uint16_t g, uint16_t b, const DeviceQuirks* p)
 {
@@ -23,6 +33,8 @@ static uint16_t convertGray(uint16_t r, uint16_t g, uint16_t b, const DeviceQuir
             return g;
         case DeviceQuirks::RGB_WEIGHTED:
             return (uint16_t)(WEIGHT_R * r + WEIGHT_G * g + WEIGHT_B * b);
+        case DeviceQuirks::RGB_MEDIAN:
+            return median3(r, g, b);
         default:
             return g;
     };
@@ -115,24 +127,20 @@ ScannerCapabilities ScanWorker::readCapabilities()
                     if (s.contains("Transparen", Qt::CaseInsensitive) || s.contains("TPU", Qt::CaseInsensitive)){   // Transparen - cy or -t Unit etc
                         caps.filmSource = s;
                         caps.supportsTransparency = true;
-                    }
-                    else{
+                    } else{
                         caps.stdSource = s;
                     }
                 }
             }
         }
     }
-
     sane_close(handle);
     sane_exit();
-
-
 
     return caps;
 }
 
-QImage ScanWorker::performScan(const ScanParameters &params)
+QImage ScanWorker::performScan(const ScanParameters &params, const DeviceQuirks &quirks)
 {
     sane_init(nullptr,nullptr);
 
@@ -143,23 +151,26 @@ QImage ScanWorker::performScan(const ScanParameters &params)
         return {};
     }
 
+
     // Params
-    const int bytecount = params.bitDepth / 8;
     SANE_Int resolution = params.dpi;
     QByteArray src = params.source.toUtf8();
     setOptionByName(handle, "resolution", &resolution);
     setOptionByName(handle, "source", src.data());
     const char* gray;
-    if(params.cap->quirks->grayMethod != DeviceQuirks::GrayMethod::SCANNER_NATIVE){
+    if(quirks.grayMethod != DeviceQuirks::GrayMethod::SCANNER_NATIVE){
         gray = "Color";
     } else{
         gray = "Gray";
     }
     const char* mode = params.color ? "Color" : gray;
 
+    DBG << "Color mode is: " << mode;
+
     sane_control_option(handle, 2, SANE_ACTION_SET_VALUE,
                        (void*)mode, nullptr);
 
+    
     // Scanning
     sane_start(handle);
 
@@ -178,6 +189,7 @@ QImage ScanWorker::performScan(const ScanParameters &params)
     SANE_Int len;
     size_t offset = 0;
 
+
     // SCAN !!!
     while ((status = sane_read(handle, data.data() + offset, data.size() - offset, &len)) == SANE_STATUS_GOOD) {
         offset += len;
@@ -186,6 +198,7 @@ QImage ScanWorker::performScan(const ScanParameters &params)
 
     sane_close(handle);
     sane_exit();
+
 
     if (status != SANE_STATUS_EOF || offset != totalBytes) {
         DBG << "NO IMAGE OR ERROR DURING SCANNING";
@@ -201,10 +214,9 @@ QImage ScanWorker::performScan(const ScanParameters &params)
         std::vector<uint16_t> rgba(width * height * 4);
         uint16_t* src = reinterpret_cast<uint16_t*>(data.data());
 
-        int samplesPerRow = sp.bytes_per_line / bytecount;
+        int samplesPerRow = sp.bytes_per_line / bytesPerSample;
 
-        if (params.color) 
-        {
+        if (params.color) {
             std::vector<uint16_t> rgba(width * height * 4);
             for (int y = 0; y < height; ++y) {
                 uint16_t* row = src + y * samplesPerRow;
@@ -216,10 +228,7 @@ QImage ScanWorker::performScan(const ScanParameters &params)
                 }
             }
             img = QImage(reinterpret_cast<const uchar*>(rgba.data()), width, height, QImage::Format_RGBX64);
-        }
-
-        else 
-        {
+        } else {
             img = QImage(width, height, QImage::Format_Grayscale16);
             for (int y = 0; y < height; ++y) {
                 uint16_t* srcRow = src + y * samplesPerRow;
@@ -229,19 +238,18 @@ QImage ScanWorker::performScan(const ScanParameters &params)
                         srcRow[x*3 + 0],
                         srcRow[x*3 + 1],
                         srcRow[x*3 + 2],
-                        params.cap->quirks
+                        &quirks
                     );
                 }
             }
         }
-
     } else if (sp.format == SANE_FRAME_GRAY) {
         DBG << "FOUND GRAYSCALE IMAGE";
 
         std::vector<uint16_t> gray(width * height);
         uint16_t* src = reinterpret_cast<uint16_t*>(data.data());
 
-        int samplesPerRow = sp.bytes_per_line / bytecount;
+        int samplesPerRow = sp.bytes_per_line / bytesPerSample;
         img = QImage(width, height, QImage::Format_Grayscale16);
         for (int y = 0; y < height; ++y) {
             uint16_t* srcRow = src + y * samplesPerRow;
@@ -251,14 +259,14 @@ QImage ScanWorker::performScan(const ScanParameters &params)
                     srcRow[x*3 + 0],
                     srcRow[x*3 + 1],
                     srcRow[x*3 + 2],
-                    params.cap->quirks
+                    &quirks
                 );
             }
         }
     } else{
         return {};
     }
-    const int calibration_stripe = params.cap->quirks->calibrationStrip;; // hardware stripe width
+    const int calibration_stripe = quirks.calibrationStrip;; // hardware stripe width
     if(calibration_stripe != 0){
         if (width > calibration_stripe) {
             QImage cropped = img.copy(calibration_stripe, 0, width - calibration_stripe, height);
@@ -271,22 +279,22 @@ QImage ScanWorker::performScan(const ScanParameters &params)
 
 // Public Slots
 
-void ScanWorker::requestPreview(const ScanParameters &params)
+void ScanWorker::requestPreview(const ScanParameters &params, const DeviceQuirks &quirks)
 {
     //int eta = ScanProfiles::estimateSeconds(deviceName, params.dpi);
-    emit scanStarted(20); // estimate
+    emit scanStarted(quirks.dpiToSeconds[params.dpi]); // estimate
 
-    QImage img = performScan(params);
+    QImage img = performScan(params, quirks);
 
     emit previewFinished(img);
 }
 
-void ScanWorker::requestScan(const ScanParameters &params)
+void ScanWorker::requestScan(const ScanParameters &params, const DeviceQuirks &quirks)
 {
     //int eta = ScanProfiles::estimateSeconds(deviceName, params.dpi);
-    emit scanStarted(75); // estimate only
+    emit scanStarted(quirks.dpiToSeconds[params.dpi]); // estimate only
 
-    QImage img = performScan(params);
+    QImage img = performScan(params, quirks);
     
     emit scanFinished(img);
 }

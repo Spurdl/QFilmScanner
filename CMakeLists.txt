@@ -19,14 +19,14 @@ qt6_add_executable(QFilmScanner
     src/MainWindow.cpp
     src/workers/ScanWorker.cpp
     src/workers/ImageWorker.cpp
+    src/devices/deviceQuirks.cpp
     ${sourcesrcc}
 )
 
 target_include_directories(QFilmScanner PRIVATE
     ${SANE_INCLUDE_DIRS}
     src/workers
-    src/device_quirks
-    src/device_quirks/profiles
+    src/devices
 )
 
 target_link_libraries(QFilmScanner PRIVATE
