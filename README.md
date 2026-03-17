@@ -21,7 +21,7 @@ QFiSc - QT Film Scanner supporting **Plustek** and possibly other **SANE-support
 ## Installation via building
  
 Building dependencies are:  
-- **QT 5.15 up to 6.10**  
+- **QT 5.15 and up to 6.10**  
 - **CMake 3.16+**
 - **C++17 compiler**
 - **QT Image formats**
@@ -31,7 +31,6 @@ Minimum dependencies are for arch-based distro
 
 For debian , QT6
 ```sudo apt install build-essential cmake pkg-config qt6-base-dev qt6-image-formats-plugins libsane-dev```
-
 
 Build with the CMake  
 ```rm -rf build && mkdir build && cd build```  
@@ -70,20 +69,21 @@ Arrow DOWN does a full scan.
 
 ## Tested devices
 
-Tested devices list can be found from [here](docs/SUPPORTED.md).   
-The build started for Plustek OpticFilm 7400, but supports any SANE-supported devices, found [here](http://www.sane-project.org/sane-mfgs.html#Z-PLUSTEK).  
+Tested devices list can be found from [here](SUPPORTED.md).   
+The build started for Plustek OpticFilm 7400, but should support all Plustek SANE-supported devices, found [here](http://www.sane-project.org/sane-mfgs.html#Z-PLUSTEK).  
 
-## Coming features
+## Coming features for release 1.0.0
 
  - Arch / Debian packages
  - AppImage building
- - Device tested runtimes
- - Device-specific configs
+ - ~~Device tested runtimes~~ Completed as of 0.2.1!
+ - ~~Device-specific configs~~ Completed as of 0.2.0!
+    - Additionally, configs for film placement for larger devices, e.g. 35mm for 120 scanner
  - Dark mode support dynamically from OS in development
  - 8-bit depth calculations for image transformations
- - *Your help* with testing and reporting other scanner times, resolutions and quirks. I will personally ever only own one anyway.
+ - QT version dependant building for QT5 / QT6 supports.
 
 - - -
-Version 0.2.0 - [Pride versioning](https://pridever.org/)
+Version 0.2.1 - [Pride versioning](https://pridever.org/)
 - - -
 Made with QT6. Made with SANE-backend. Made with love.
