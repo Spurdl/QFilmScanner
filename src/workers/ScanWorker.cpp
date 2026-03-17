@@ -209,26 +209,31 @@ QImage ScanWorker::performScan(const ScanParameters &params, const DeviceQuirks 
 
     QImage img;
 
+    int r_offset = 0;
+    int g_offset = +2;
+    int b_offset = +4;
+
     if (sp.format == SANE_FRAME_RGB){
         DBG << "FOUND RGB IMAGE";
         std::vector<uint16_t> rgba(width * height * 4);
         uint16_t* src = reinterpret_cast<uint16_t*>(data.data());
-
         int samplesPerRow = sp.bytes_per_line / bytesPerSample;
 
         if (params.color) {
-            std::vector<uint16_t> rgba(width * height * 4);
+            DBG << "Actual Color Image";
+            img = QImage(width - b_offset, height, QImage::Format_RGBX64);
             for (int y = 0; y < height; ++y) {
-                uint16_t* row = src + y * samplesPerRow;
-                for (int x = 0; x < width; ++x) {
-                    rgba[(y*width + x)*4 + 0] = row[x*3 + 0];
-                    rgba[(y*width + x)*4 + 1] = row[x*3 + 1];
-                    rgba[(y*width + x)*4 + 2] = row[x*3 + 2];
-                    rgba[(y*width + x)*4 + 3] = 65535;
+                uint16_t* srcRow = src + y * samplesPerRow;
+                uint16_t* dstRow = reinterpret_cast<uint16_t*>(img.scanLine(y));
+                for (int x = 0; x < width - b_offset; ++x) {
+                    dstRow[x*4 + 0] = srcRow[(x+r_offset)*3 + 0];
+                    dstRow[x*4 + 1] = srcRow[(x+g_offset)*3 + 1];
+                    dstRow[x*4 + 2] = srcRow[(x+b_offset)*3 + 2];
+                    dstRow[x*4 + 3] = 65535;
                 }
             }
-            img = QImage(reinterpret_cast<const uchar*>(rgba.data()), width, height, QImage::Format_RGBX64);
         } else {
+            DBG << "Converting to gray!";
             img = QImage(width, height, QImage::Format_Grayscale16);
             for (int y = 0; y < height; ++y) {
                 uint16_t* srcRow = src + y * samplesPerRow;
@@ -255,22 +260,17 @@ QImage ScanWorker::performScan(const ScanParameters &params, const DeviceQuirks 
             uint16_t* srcRow = src + y * samplesPerRow;
             uint16_t* dstRow = reinterpret_cast<uint16_t*>(img.scanLine(y));
             for (int x = 0; x < width; ++x) {
-                dstRow[x] = convertGray(
-                    srcRow[x*3 + 0],
-                    srcRow[x*3 + 1],
-                    srcRow[x*3 + 2],
-                    &quirks
-                );
+                dstRow[x] = srcRow[x];
             }
         }
     } else{
         return {};
     }
+    DBG << "Calibration stripe removal!";
     const int calibration_stripe = quirks.calibrationStrip;; // hardware stripe width
     if(calibration_stripe != 0){
         if (width > calibration_stripe) {
-            QImage cropped = img.copy(calibration_stripe, 0, width - calibration_stripe, height);
-            img = cropped;
+            img = img.copy(calibration_stripe, 0, width - calibration_stripe, height);
             width -= calibration_stripe;
         }
     }
