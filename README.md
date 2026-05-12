@@ -81,9 +81,9 @@ The build started for Plustek OpticFilm 7400, but should support all Plustek SAN
     - Additionally, configs for film placement for larger devices, e.g. 35mm for 120 scanner
  - Dark mode support dynamically from OS in development
  - 8-bit depth calculations for image transformations
- - QT version dependant building for QT5 / QT6 supports.
+ - ~~QT version dependant building for QT5 / QT6 supports.~~ Completed as of 0.2.3
 
 - - -
-Version 0.2.1 - [Pride versioning](https://pridever.org/)
+Version 0.2.3 - [Pride versioning](https://pridever.org/)
 - - -
 Made with QT6. Made with SANE-backend. Made with love.
