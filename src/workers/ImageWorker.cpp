@@ -31,11 +31,9 @@ QImage autoLevel(const QImage &src, double lowPercent, double highPercent)
     auto computePercentilesNew = [lowPercent, highPercent](const std::vector<uint16_t> &data) -> std::pair<uint16_t, uint16_t> {
         if (data.empty()) return {0, 65535};
 
-        // 1. Build Histogram
         std::vector<uint32_t> hist(65536, 0);
         for (uint16_t val : data) hist[val]++;
 
-        // 2. Find Low Threshold
         uint32_t lowThresholdCount = data.size() * lowPercent;
         uint32_t sum = 0;
         uint16_t p0 = 0;
@@ -47,7 +45,6 @@ QImage autoLevel(const QImage &src, double lowPercent, double highPercent)
             }
         }
 
-        // 3. Find High Threshold
         uint32_t highThresholdCount = data.size() * (1.0 - highPercent);
         sum = 0;
         uint16_t p100 = 65535;

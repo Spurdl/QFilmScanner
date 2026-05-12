@@ -3,6 +3,8 @@ project(QFilmScanner LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_AUTOMOC ON)
+set(VERSION_STRING "0.2.3")
+add_definitions(-DVERSION_STRING="${VERSION_STRING}")
 
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
 find_package(PkgConfig REQUIRED)
